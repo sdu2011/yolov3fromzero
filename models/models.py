@@ -131,7 +131,6 @@ class Yolov3(nn.Module):
                 yolo_out.append(module(x))
             else:
                 # print('conv:x input shape={}'.format(x.shape))
-                # print(module)
                 x = module(x)
                 # print('conv:x output shape={}'.format(x.shape))
 

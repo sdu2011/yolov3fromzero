@@ -1,0 +1,110 @@
+from torch.utils.data import Dataset
+import os
+import cv2
+import numpy as np
+import torch
+
+class  LoadImagesAndLabels(Dataset):
+    def __init__(self,traintxt,imgsize=416):
+        super().__init__()
+        self.imgsize = imgsize
+        try:
+            with open(traintxt,'r') as f:
+                lines = f.read().splitlines()
+                # print(lines)
+        except:
+            raise Exception('{} does not exist'.format(traintxt))
+        
+        self.img_files = lines
+        self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt') for x in self.img_files] 
+        print(self.label_files)
+
+    def __len__(self):
+        return len(self.img_files)
+
+    def __getitem__(self,index):
+        # load image
+        img_path = self.img_files[index]
+        img = cv2.imread(img_path)   
+        
+        # load label
+        label_path = self.label_files[index]
+        try:
+            with open(label_path,'r') as f:
+                lines = f.read().splitlines()
+                label = [line.split() for line in lines]
+                label = np.array(label,dtype=np.float32)
+        except:
+            raise Exception('{} does not exist'.format(label_path))
+        
+        new_img,new_label = letter_box(img,label,desired_size=416)
+
+
+        new_img = new_img[:,:,::-1] #bgr->rgb
+        new_img = new_img.transpose( 2, 0, 1)
+        new_img = np.ascontiguousarray(new_img)
+        #https://www.cnblogs.com/devilmaycry812839668/p/13761613.html
+        #返回的是chw rgb格式.
+        print(new_img.shape)
+
+        return torch.from_numpy(new_img),torch.from_numpy(new_label)
+
+    @staticmethod
+    def collate_fn(batch):
+        img,label = list(zip(*batch))
+
+        new_label=[]
+        for i,l in enumerate(label):
+            box_num,attr_num = l.shape
+            new_l = torch.randn(box_num,1+attr_num)
+            new_l[:,1:] = l
+            new_l[:,0] = i
+            #对label在dim1上添加1,标识这是哪一个图片的label
+
+            new_label.append(new_l)
+
+        imgs,labels = torch.stack(img,0),torch.cat(new_label,0)
+        return imgs,labels
+
+def letter_box(img,label,desired_size=416,color=[114,114,114]):
+    old_size = img.shape[:2] # old_size is in (height, width) format
+
+    ratio = float(desired_size)/max(old_size)
+    new_size = tuple([int(x*ratio) for x in old_size])
+    if ratio != 1:
+        interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
+        #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
+        img = cv2.resize(img,new_size,interpolation=cv2.INTER_AREA)
+
+    # new_size should be in (width, height) format
+    im = cv2.resize(img, (new_size[1], new_size[0]))
+    # print('new_size={}'.format(new_size))
+
+    delta_w = desired_size - new_size[1]
+    delta_h = desired_size - new_size[0]
+    top, bottom = delta_h//2, delta_h-(delta_h//2)
+    left, right = delta_w//2, delta_w-(delta_w//2)
+
+    new_img = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT,
+        value=color)
+
+    # print(label.shape)
+    new_label = label    
+    # c x y w h
+    new_label[:,1] = left  + new_size[1]*label[:,1]
+    new_label[:,2] = top  + new_size[1]*label[:,2]
+    new_label[:,3] = label[:,3] * ratio
+    new_label[:,4] = label[:,4] * ratio
+
+    return new_img,new_label
+
+if __name__ == '__main__':
+    traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
+    dataset = LoadImagesAndLabels(traintxt)
+    for data in dataset:
+        img,label = data
+        print(img.shape,label.shape)
+        # break
+    # img = cv2.imread('/home/autocore/work/yolov3_darknet/lishui/images/1599039225trans4.png')
+    # newimg = letter_box(img,desired_size=416)
+    # print(newimg.shape)
