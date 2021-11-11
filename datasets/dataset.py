@@ -45,7 +45,7 @@ class  LoadImagesAndLabels(Dataset):
         new_img = np.ascontiguousarray(new_img)
         #https://www.cnblogs.com/devilmaycry812839668/p/13761613.html
         #返回的是chw rgb格式.
-        print(new_img.shape)
+        # print(new_img.shape)
 
         return torch.from_numpy(new_img),torch.from_numpy(new_label)
 
@@ -67,7 +67,7 @@ class  LoadImagesAndLabels(Dataset):
         return imgs,labels
 
 def letter_box(img,label,desired_size=416,color=[114,114,114]):
-    print('img shape:{},label shape:{}'.format(img.shape,label.shape))
+    # print('img shape:{},label shape:{}'.format(img.shape,label.shape))
 
     old_size = img.shape[:2] # old_size is in (height, width) format
 
@@ -81,15 +81,15 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 
     # new_size should be in (width, height) format
     # im = cv2.resize(img, (new_size[1], new_size[0]))
-    print('old_size:{} new_size:{}'.format(old_size,new_size))
-    print('img shape:{}'.format(img.shape))
+    # print('old_size:{} new_size:{}'.format(old_size,new_size))
+    # print('img shape:{}'.format(img.shape))
 
     h,w = img.shape[:2]
     box_x = w * label[...,1]
     box_y = h * label[...,2]
     box_w = w * label[...,3]
     box_h = h * label[...,4]
-    print(box_x.shape,box_y.shape,box_w.shape,box_h.shape)
+    # print(box_x.shape,box_y.shape,box_w.shape,box_h.shape)
     # 这里是绝对尺度.不是比例
 
     delta_w = desired_size - new_size[1]
@@ -99,7 +99,7 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 
     new_img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT,
         value=color)
-    print('new_img shape:{}'.format(new_img.shape))
+    # print('new_img shape:{}'.format(new_img.shape))
     new_img_h,new_img_w = new_img.shape[:2]
 
     new_label = label    
