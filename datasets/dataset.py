@@ -41,7 +41,7 @@ class  LoadImagesAndLabels(Dataset):
 
 
         new_img = new_img[:,:,::-1] #bgr->rgb
-        new_img = new_img.transpose( 2, 0, 1)
+        new_img = new_img.transpose( 2, 0, 1)  #hwc-chw
         new_img = np.ascontiguousarray(new_img)
         #https://www.cnblogs.com/devilmaycry812839668/p/13761613.html
         #返回的是chw rgb格式.
@@ -67,34 +67,47 @@ class  LoadImagesAndLabels(Dataset):
         return imgs,labels
 
 def letter_box(img,label,desired_size=416,color=[114,114,114]):
+    print('img shape:{},label shape:{}'.format(img.shape,label.shape))
+
     old_size = img.shape[:2] # old_size is in (height, width) format
 
     ratio = float(desired_size)/max(old_size)
-    new_size = tuple([int(x*ratio) for x in old_size])
+    new_size = tuple([1+int(x*ratio) for x in old_size])
     if ratio != 1:
         interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
         #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
-        img = cv2.resize(img,new_size,interpolation=cv2.INTER_AREA)
+        img = cv2.resize(img,(new_size[1],new_size[0]),interpolation=cv2.INTER_AREA)
+        # 这里只改变了img的尺寸.宽高比是没有变化的
 
     # new_size should be in (width, height) format
-    im = cv2.resize(img, (new_size[1], new_size[0]))
-    # print('new_size={}'.format(new_size))
+    # im = cv2.resize(img, (new_size[1], new_size[0]))
+    print('old_size:{} new_size:{}'.format(old_size,new_size))
+    print('img shape:{}'.format(img.shape))
+
+    h,w = img.shape[:2]
+    box_x = w * label[...,1]
+    box_y = h * label[...,2]
+    box_w = w * label[...,3]
+    box_h = h * label[...,4]
+    print(box_x.shape,box_y.shape,box_w.shape,box_h.shape)
+    # 这里是绝对尺度.不是比例
 
     delta_w = desired_size - new_size[1]
     delta_h = desired_size - new_size[0]
     top, bottom = delta_h//2, delta_h-(delta_h//2)
     left, right = delta_w//2, delta_w-(delta_w//2)
 
-    new_img = cv2.copyMakeBorder(im, top, bottom, left, right, cv2.BORDER_CONSTANT,
+    new_img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT,
         value=color)
+    print('new_img shape:{}'.format(new_img.shape))
+    new_img_h,new_img_w = new_img.shape[:2]
 
-    # print(label.shape)
     new_label = label    
     # c x y w h
-    new_label[:,1] = left  + new_size[1]*label[:,1]
-    new_label[:,2] = top  + new_size[1]*label[:,2]
-    new_label[:,3] = label[:,3] * ratio
-    new_label[:,4] = label[:,4] * ratio
+    new_label[:,1] = (left  + box_x)/new_img_w
+    new_label[:,2] = (top  + box_y)/new_img_h
+    new_label[:,3] = box_w/new_img_w
+    new_label[:,4] = box_h/new_img_h
 
     return new_img,new_label
 
