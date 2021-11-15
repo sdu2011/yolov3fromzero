@@ -36,14 +36,19 @@ class YoloLayer(nn.Module):
         self.anchors_num = len(self.anchors)
         self.index = yolo_index
 
-        self.anchor_vec = self.anchors/self.stride
+        self.anchor_scale = self.anchors/self.stride
         #配置文件中的anchor是相对于原图的,这里做了下采样.
-        self.anchor_wh = self.anchor_vec.view(1,len(anchors),1,1,2)
+        self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2)
         #shape匹配yolo层的输出(bs, anchors, grid, grid, xywh+conf+cls)
 
-        ny,nx = input_img_size[0]//stride,input_img_size[1]//stride
-        self.grid = self.__make_grid(nx,ny)
+        self.ny,self.nx = input_img_size[0]//stride,input_img_size[1]//stride
+        self.grid = self.__make_grid(self.nx,self.ny)
 
+        # print('layer{},anchors:{},nx:{},anchor_scale:{}'.\
+        #     format(yolo_index,self.anchors,nx,self.anchor_scale))
+
+    def get_grid(self):
+        return self.nx,self.ny
 
     def forward(self,x):
         """

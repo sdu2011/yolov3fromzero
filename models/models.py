@@ -108,8 +108,21 @@ class Yolov3(nn.Module):
         super(Yolov3, self).__init__()
         self.module_defs = parse_model_cfg(cfg)
         self.module_list = create_modules(self.module_defs)
+        self.yolo_layers_index = [i for i, m in enumerate(self.module_list) \
+            if m.__class__.__name__ == 'YoloLayer']
+        self.yolo_layers_num = len(self.yolo_layers_index)
+        #yolo layer的层数
 
         # print(self.module_list)
+
+    def get_grid_num(self,i):
+        """
+        i:第几个yolo层
+        """
+        yolo_layer_index = self.yolo_layers_index[i]
+        yolo_layer = self.module_list[yolo_layer_index]
+
+        return yolo_layer.get_grid()
 
     def forward(self, x):
         yolo_out = []
@@ -135,13 +148,6 @@ class Yolov3(nn.Module):
                 # print('conv:x output shape={}'.format(x.shape))
 
             out_every_layer.append(x)
-
-
-        print('training:{}'.format(self.training))
-        # if self.training:
-        #     return yolo_out
-        # else:
-
 
         return yolo_out
         
