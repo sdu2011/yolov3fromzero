@@ -42,11 +42,13 @@ class YoloLoss(nn.Module):
                 grid_y = e[3].long()
 
                 if layer_idx == i:  
-                    mask_obj[batch_idx,anchor_idx,grid_x,grid_y] = True
-                    gt_x[batch_idx,anchor_idx,grid_x,grid_y] = gt_xywhc[j,0] 
-                    gt_y[batch_idx,anchor_idx,grid_x,grid_y] = gt_xywhc[j,1] 
-                    gt_w[batch_idx,anchor_idx,grid_x,grid_y] = gt_xywhc[j,2] 
-                    gt_h[batch_idx,anchor_idx,grid_x,grid_y] = gt_xywhc[j,3] 
+                    # print('batch_idx={},anchor_idx={},grid_x={},grid_y={}'.format(batch_idx,anchor_idx,grid_x,grid_y))
+                    mask_obj[batch_idx,anchor_idx,grid_y,grid_x] = True
+                    gt_x[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,0] 
+                    
+                    gt_y[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,1] 
+                    gt_w[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,2] 
+                    gt_h[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,3] 
 
                     c = gt_xywhc[j,4].long()
                     gt_c[...,c] = True
@@ -87,6 +89,8 @@ class YoloLoss(nn.Module):
                 pre_h = pre_box[...,3]
                 lh += MSELoss(pre_h[mask_obj], gt_h[mask_obj])
 
+                # print('pre_x={}'.format(pre_x[0,0,18,26]))
+                # print('gt_x={}'.format(gt_x[0,0,26,18]))
             """
             cls loss
             """
@@ -94,9 +98,7 @@ class YoloLoss(nn.Module):
                 pre_cls = yolo_out[...,5:]
                 lcls += BCEcls(pre_cls[mask_obj],gt_c[mask_obj])
 
-        
-        print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf,lx,ly,lw,lh,lcls))
-
+        # print('lconf={}\n,lx={}\n,ly={}\n,lw={}\n,lh={}\n,lcls={}\n'.format(lconf,lx,ly,lw,lh,lcls))
         return lconf,lx,ly,lw,lh,lcls
 
     def match_gtbox_to_yololayer(self,targets,yolo_outs,threshold=0.5):
@@ -107,6 +109,7 @@ class YoloLoss(nn.Module):
         gt_box:相应特征图上的box尺寸和位置. [gt_box_num,4] x,y,w,h,c
         """
         gt_box_num = targets.shape[0]
+        # print('gt_box_num={}'.format(gt_box_num))
         mask = torch.zeros(gt_box_num,4)
         gt_xywhc = torch.zeros(gt_box_num,5)
 
@@ -117,7 +120,7 @@ class YoloLoss(nn.Module):
             yolo_layer = self.model.module_list[yolo_layer_index]
             anchor_boxes = yolo_layer.anchor_scale
 
-            bs,anchor_num,grid_x,grid_y,_ = pre.shape
+            bs,anchor_num,grid_y,grid_x,_ = pre.shape
             gt_boxes = targets.clone()
             # 这里要特别注意python中深浅拷贝的问题.如果用gt_boxes = targets,处理后实际上把targets和gt_boxes都更改掉了.
             gt_boxes[:,2] = gt_boxes[:,2]*grid_x
@@ -150,11 +153,14 @@ class YoloLoss(nn.Module):
             mask[i,3] = grid_xys[layer_idx][i,1]
 
             grid_x,grid_y = self.model.get_grid_num(layer_idx)
+            # print('grid_x={},grid_y={}'.format(grid_x,grid_y))
             gt_xywhc[i,0] = targets[i,2] * grid_x
             gt_xywhc[i,1] = targets[i,3] * grid_y
             gt_xywhc[i,2] = targets[i,4] * grid_x
             gt_xywhc[i,3] = targets[i,5] * grid_y
             gt_xywhc[i,4] = targets[i,1]
+
+        # print('gt_xywhc={}'.format(gt_xywhc))
 
         return mask,gt_xywhc
 

@@ -28,7 +28,10 @@ class FeatureShortcut(nn.Module):
         return x + y
 
 class YoloLayer(nn.Module):
-    def __init__(self, input_img_size,anchors,cls_num,stride,yolo_index=1):
+    def __init__(self, input_img_size,anchors,cls_num,stride,yolo_index=1,device='cuda:0'):
+        """
+        img_size:(h,w)
+        """
         super(YoloLayer, self).__init__()
         self.anchors = torch.Tensor(anchors)
         self.cls_num = cls_num
@@ -38,7 +41,7 @@ class YoloLayer(nn.Module):
 
         self.anchor_scale = self.anchors/self.stride
         #配置文件中的anchor是相对于原图的,这里做了下采样.
-        self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2)
+        self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2).to(device)
         #shape匹配yolo层的输出(bs, anchors, grid, grid, xywh+conf+cls)
 
         self.ny,self.nx = input_img_size[0]//stride,input_img_size[1]//stride
@@ -52,10 +55,11 @@ class YoloLayer(nn.Module):
 
     def forward(self,x):
         """
-        x:[batch,3x(5+cls),n,n]    
+        x:[batch,3x(5+cls),ny,nx]    
         """
+        # print('x shape={}'.format(x.shape))
         batch,_,ny,nx = x.shape
-        x = x.view(batch,self.anchors_num,(5+self.cls_num),ny,nx).permute(0,1,3,4,2).contiguous()
+        x = x.view(batch,self.anchors_num,(5+self.cls_num),ny,nx).permute(0,1,4,3,2).contiguous()
         #[batch,3x(5+cls),n,n] --> [batch,anchors,grid,grid,5+cls]
         if self.training:
             return x
@@ -69,15 +73,17 @@ class YoloLayer(nn.Module):
     def __make_grid(self,nx=13,ny=13,device='cuda:0'):
         yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
         grid = torch.stack((xv,yv),2)
-        #构造cx,cy
-        grid = grid.view((1,1,ny,nx,2))
+        
+        grid = grid.view((1,1,ny,nx,2)).to(device)
+
         return grid
 
     def decode(self,model_out):
         """
-        model_out: [batch,3,n,n,xywh+conf+cls]
+        model_out: [batch,3,ny,nx,xywh+conf+cls]
         """
-        model_out[...,:2] = torch.sigmoid(model_out[...,0:2]) + self.grid
+        model_out[...,0:2] = torch.sigmoid(model_out[...,0:2]) + self.grid
+        # print('mode_out={}'.format(model_out[...,:2]))
         model_out[...,2:4] = torch.exp(model_out[...,2:4]) * self.anchor_wh
         model_out[...,4:] = torch.sigmoid(model_out[..., 4:])
 
