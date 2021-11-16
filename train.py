@@ -11,12 +11,17 @@ if __name__ == '__main__':
                                             num_workers=4,
                                             shuffle=True,
                                             collate_fn=dataset.collate_fn)
+    cuda = torch.cuda.is_available()
+    device = torch.device('cuda:0' if cuda else 'cpu')
     yolov3net = Yolov3('cfg/yolov3.cfg')
-    yolov3net.train()
+    yolov3net.to(device).train()
     loss = YoloLoss(yolov3net)
-    for epoch in range(100):
+    optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, yolov3net.parameters()), lr=1e-4, weight_decay=5e-4)
+
+    for epoch in range(1000):
         for data in dataloader:
             imgs,labels = data
+            imgs = imgs.to(device)
             imgs = imgs.float()/255.
             # print(imgs.shape,labels.shape)
             # print(labels[:,0])
@@ -26,5 +31,7 @@ if __name__ == '__main__':
             lconf,lx,ly,lw,lh,lcls = loss.compute_loss(yolo_out,labels)
             total_loss = lconf + lx + ly + lw + lh + lcls
             print('total_loss={}'.format(total_loss))
-            total_loss.backward()
+            optimizer.zero_grad() #清空梯度
+            total_loss.backward() #反向传播
+            optimizer.step()      #更新参数
             
