@@ -47,11 +47,11 @@ class  LoadImagesAndLabels(Dataset):
         #返回的是chw rgb格式.
         # print(new_img.shape)
 
-        return torch.from_numpy(new_img),torch.from_numpy(new_label)
+        return torch.from_numpy(new_img),torch.from_numpy(new_label),img_path
 
     @staticmethod
     def collate_fn(batch):
-        img,label = list(zip(*batch))
+        img,label,img_path = list(zip(*batch))
 
         new_label=[]
         for i,l in enumerate(label):
@@ -64,7 +64,7 @@ class  LoadImagesAndLabels(Dataset):
             new_label.append(new_l)
 
         imgs,labels = torch.stack(img,0),torch.cat(new_label,0)
-        return imgs,labels
+        return imgs,labels,img_path
 
 def letter_box(img,label,desired_size=416,color=[114,114,114]):
     # print('img shape:{},label shape:{}'.format(img.shape,label.shape))
@@ -114,9 +114,14 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 if __name__ == '__main__':
     traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     dataset = LoadImagesAndLabels(traintxt)
-    for data in dataset:
-        img,label = data
-        print(img.shape,label.shape)
+    dataloader = torch.utils.data.DataLoader(dataset,
+                                        batch_size=8,
+                                        num_workers=4,
+                                        shuffle=True,
+                                        collate_fn=dataset.collate_fn)
+    for data in dataloader:
+        img,label,path = data
+        print(img.shape,label.shape,path)
         # break
     # img = cv2.imread('/home/autocore/work/yolov3_darknet/lishui/images/1599039225trans4.png')
     # newimg = letter_box(img,desired_size=416)

@@ -65,8 +65,18 @@ class YoloLayer(nn.Module):
             return x
         else:
             # inference
+            print('yolo layer{} inference'.format(self.index))            
             model_out = x.clone()
             self.decode(model_out)
+            model_out[...,0:4] = model_out[...,0:4] * self.stride
+            #还原到在原图的位置(模型输入的图片)
+
+            bs,_,_,_,n = model_out.shape
+            model_out = model_out.view(bs,-1,n)
+
+            # mask = (model_out[...,4] > 0.9)
+            # print('满足条件的输出为:')
+            # print(model_out[mask])
 
             return model_out
             
@@ -81,6 +91,8 @@ class YoloLayer(nn.Module):
     def decode(self,model_out):
         """
         model_out: [batch,3,ny,nx,xywh+conf+cls]
+
+        return:在当前feature map上的x,y,w,h
         """
         model_out[...,0:2] = torch.sigmoid(model_out[...,0:2]) + self.grid
         # print('mode_out={}'.format(model_out[...,:2]))
