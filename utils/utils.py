@@ -128,7 +128,7 @@ def nms(dets, thresh):
         inter = w * h
         ovr = inter / (areas[i] + areas[order[1:]] - inter)
         # print('ovr shape:{}'.format(ovr.shape))
-        print('ovr:{}'.format(ovr))
+        # print('ovr:{}'.format(ovr))
         #计算所有Box与当前score最高的box的iou
 
         inds = np.where(ovr <= thresh)[0]
@@ -154,9 +154,15 @@ def plot_one_box(x, img, color=(255,0,0), label=None, line_thickness=None):
         cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
-def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.3):
+def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.6):
+    """
+    return [[boxes of img1],[boxes of img2],....] 
+    """
     output = torch.cat(yolo_outs,dim=1)
     bs = output.shape[0]
+
+    detections = [[]] * bs
+
     for i in range(bs):
         img_name = (imgs_path[i]).split('/')[-1]
         # print(img_name)
@@ -172,7 +178,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
 
         box_num = boxes.shape[0]
         if box_num > 0:
-            print('box_num={}'.format(box_num))
+            # print('box_num={}'.format(box_num))
             box_center_x = boxes[...,0]
             box_center_y = boxes[...,1]
 
@@ -187,11 +193,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
             boxes[...,3] = box_rb_y
 
             boxes = boxes.cpu().numpy()
-            print('boxes num={}'.format(boxes.shape[0]))
+            # print('predict boxes num={}'.format(boxes.shape[0]))
             keep = nms(boxes, iou_thre)
             
             final_boxes = boxes[keep]
-            print('final_boxes num={}'.format(final_boxes.shape[0]))
+            # print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
+            detections[i].append(final_boxes)
 
             cv_img = imgs[i,...].cpu().numpy()
             cv_img = cv_img.transpose(1,2,0)[...,::-1]
@@ -202,9 +209,135 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
             final_box_num = final_boxes.shape[0]
             for i in range(final_box_num):
                 box = final_boxes[i,0:4]
+                # print('plot box on img************')
                 plot_one_box(box, cv_img, color=(255,0,0), label=None, line_thickness=None)
 
             cv2.imwrite(full_name,cv_img)
+    
+    return detections
+
+def bbox_iou(box1, box2, x1y1x2y2=True):
+    # if len(box1.shape) == 1:
+    #    box1 = box1.reshape(1, 4)
+
+    """
+    Returns the IoU of two bounding boxes
+    """
+    if x1y1x2y2:
+        # Get the coordinates of bounding boxes
+        b1_x1, b1_y1, b1_x2, b1_y2 = box1[:, 0], box1[:, 1], box1[:, 2], box1[:, 3]
+        b2_x1, b2_y1, b2_x2, b2_y2 = box2[:, 0], box2[:, 1], box2[:, 2], box2[:, 3]
+    else:
+        # Transform from center and width to exact coordinates
+        b1_x1, b1_x2 = box1[:, 0] - box1[:, 2] / 2, box1[:, 0] + box1[:, 2] / 2
+        b1_y1, b1_y2 = box1[:, 1] - box1[:, 3] / 2, box1[:, 1] + box1[:, 3] / 2
+        b2_x1, b2_x2 = box2[:, 0] - box2[:, 2] / 2, box2[:, 0] + box2[:, 2] / 2
+        b2_y1, b2_y2 = box2[:, 1] - box2[:, 3] / 2, box2[:, 1] + box2[:, 3] / 2
+
+    # get the corrdinates of the intersection rectangle
+    inter_rect_x1 = torch.max(b1_x1, b2_x1)
+    inter_rect_y1 = torch.max(b1_y1, b2_y1)
+    inter_rect_x2 = torch.min(b1_x2, b2_x2)
+    inter_rect_y2 = torch.min(b1_y2, b2_y2)
+
+    # Intersection area
+    inter_area = torch.clamp(inter_rect_x2 - inter_rect_x1, 0) * torch.clamp(inter_rect_y2 - inter_rect_y1, 0)
+    # Union Area
+    b1_area = (b1_x2 - b1_x1) * (b1_y2 - b1_y1)
+    b2_area = (b2_x2 - b2_x1) * (b2_y2 - b2_y1)
+
+    return inter_area / (b1_area + b2_area - inter_area + 1e-16)
+
+def metric(detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
+    """
+    labels: [n,6] 6:img_idx,xywhc
+    """
+    APs = []
+    bs = len(detections)
+    for i in range(bs):  
+        correct = []
+
+        mask = (labels[:,0] == i) 
+        label = labels[mask]  
+        # print('label :{}'.format(label))
+        #属于这张图的label
+
+        gt_boxes = label[:,2:] * img_size
+        # print('尺寸:gt_boxes :{}'.format(gt_boxes))
+        gt_boxes_clone = torch.zeros_like(gt_boxes)
+        gt_boxes_clone[:,0] = gt_boxes[:,0] - gt_boxes[:,2]/2
+        gt_boxes_clone[:,1] = gt_boxes[:,1] - gt_boxes[:,3]/2
+        gt_boxes_clone[:,2] = gt_boxes[:,0] + gt_boxes[:,2]/2
+        gt_boxes_clone[:,3] = gt_boxes[:,1] + gt_boxes[:,3]/2
+        #转换成角点的表达形式
+
+        # print('角点:gt_boxes:{}'.format(gt_boxes_clone))
+
+        detection = detections[i]
+        if len(detection) == 0:
+            APs.append(0)
+        else:
+            detected_boxes = detection[0]
+            idx = np.argsort(detected_boxes[...,4])[::-1]
+            #按照conf降序排列
+            detected_boxes = detected_boxes[idx]
+            # print('detected_boxes shape:{}'.format(detected_boxes.shape))
+
+            """
+            挨个处理每一个预测框b,计算gt boxes和b的iou,取iou最大的gtbox_i,认为b是gtbox_i对应的预测框.
+            """
+            for det_box in detected_boxes:
+                det_box = torch.from_numpy(det_box).float()
+                det_box = det_box.view(1,-1)
+                #计算gt box和det_box的iou
+                # print('det_box:{}'.format(det_box))
+                # print('gt_boxes:{}'.format(gt_boxes_clone))
+                ious=bbox_iou(det_box,gt_boxes_clone)
+                # print('ious :{}'.format(ious))
+
+                best_gt_i = np.argmax(ious)
+                iou_matched = ious[best_gt_i]
+                # print('匹配iou为:{}'.format(iou_matched))
+                iou_satisfied = iou_matched > iou_thre
+                
+                # print('真值:gt_boxes :{}'.format(gt_boxes))
+                gt_box_cls = int(label[best_gt_i,1])
+                det_cls = det_box[:,5:]
+                # print('预测概率为:{}，真实类别为:{}'.format(det_cls,gt_box_cls))
+                det_cls_idx = torch.where(det_cls > cls_thre)[1]
+                # print('预测类别为:{}'.format(det_cls_idx.tolist()))
+                cls_correct = gt_box_cls in det_cls_idx.tolist() 
+                # print('类别预测正确:{},真值:{},预测值:{}'.format(cls_correct,gt_box_cls,det_cls_idx.tolist()))
+                # print('iou匹配成功:{}'.format(iou_satisfied))
+                
+                if iou_satisfied and cls_correct:
+                    correct.append(1)
+                else:
+                    # print('iou_matched:{}'.format(iou_matched))
+                    # print('det_cls_idx:{}'.format(det_cls_idx))
+                    correct.append(0)
+
+            # print('correct:{}'.format(correct))
+
+            true_positives = np.array(correct) 
+            true_positives = np.cumsum(true_positives)
+            recall = true_positives / gt_boxes.shape[0]
+            #更新recall列表
+
+            pre_counts = np.arange(1,1+len(true_positives))
+            #生成猜测次数列表 从1到n
+            precision = true_positives/pre_counts
+            #更新precision列表
+
+            AP = compute_ap(recall,precision)
+            APs.append(AP)
+
+            print('img{} in this batch,recall:{},precision:{},AP:{}'.format(i,recall[-1],precision[-1],AP))
+    
+    print('************mAP={}*****************'.format(np.mean(APs)))
+
+
+
 
 
 if __name__ == '__main__':

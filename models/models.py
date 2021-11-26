@@ -152,7 +152,7 @@ class Yolov3(nn.Module):
         return yolo_out
         
 if __name__ == '__main__':
-    yolov3net = Yolov3('cfg/yolov3.cfg')
+    yolov3net = Yolov3('cfg/yolov3_tlr.cfg')
     yolov3net.eval()
     # print(yolov3net.module_defs)
     input = torch.randn((1,3,416,416))
