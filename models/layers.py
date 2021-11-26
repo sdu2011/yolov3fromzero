@@ -65,7 +65,7 @@ class YoloLayer(nn.Module):
             return x
         else:
             # inference
-            print('yolo layer{} inference'.format(self.index))            
+            # print('yolo layer{} inference'.format(self.index))            
             model_out = x.clone()
             self.decode(model_out)
             model_out[...,0:4] = model_out[...,0:4] * self.stride
