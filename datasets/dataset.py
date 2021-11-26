@@ -126,7 +126,6 @@ def debug_dataset(path,new_img,new_label):
     new_label:处理后的img上的label
     """
     print(new_img.shape,new_label.shape)
-    print('label:{}'.format(new_label))
     name = path.split('/')[-1]
     full_name = './input_imgs/{}'.format(name)
     
@@ -140,19 +139,13 @@ def debug_dataset(path,new_img,new_label):
     lt_y = img_h * y - (img_h * h)/2
     rd_x = img_w * x + (img_w * w)/2
     rd_y = img_h * y + (img_h * h)/2
-    box_num = lt_x.shape[0]
-    for i in range(box_num):
-        ltx = int(lt_x[i])
-        lty = int(lt_y[i])
-        rdx = int(rd_x[i])
-        rdy = int(rd_y[i])
-        print('({},{}) ({},{})'.format(ltx,lty,rdx,rdy))
-        cv2.rectangle(new_img, (ltx,lty), (rdx,rdy), (255,0,0))
+
+    cv2.rectangle(new_img, (lt_x,lt_y), (rd_x,rd_y), (255,0,0))
     cv2.imwrite(full_name,new_img)
     print('save {}'.format(full_name))
 
 if __name__ == '__main__':
-    traintxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
+    traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     dataset = LoadImagesAndLabels(traintxt)
     dataloader = torch.utils.data.DataLoader(dataset,
                                         batch_size=1,
@@ -163,7 +156,7 @@ if __name__ == '__main__':
         img,label,path = data
         # print(img,label,path)
 
-        break
+        # break
     # img = cv2.imread('/home/autocore/work/yolov3_darknet/lishui/images/1599039225trans4.png')
     # newimg = letter_box(img,desired_size=416)
     # print(newimg.shape)
