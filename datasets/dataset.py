@@ -23,6 +23,11 @@ class  LoadImagesAndLabels(Dataset):
         return len(self.img_files)
 
     def __getitem__(self,index):
+        """
+        return : new_label:[box_num,6] 6:img_idx_in_this_batch,c,x,y,w,h]
+        """
+        # print('__getitem__**********************')
+
         # load image
         img_path = self.img_files[index]
         img = cv2.imread(img_path)   
@@ -39,6 +44,7 @@ class  LoadImagesAndLabels(Dataset):
         
         new_img,new_label = letter_box(img,label,desired_size=416)
 
+        # debug_dataset(img_path,new_img,new_label)
 
         new_img = new_img[:,:,::-1] #bgr->rgb
         new_img = new_img.transpose( 2, 0, 1)  #hwc-chw
@@ -51,6 +57,7 @@ class  LoadImagesAndLabels(Dataset):
 
     @staticmethod
     def collate_fn(batch):
+        # print('collate_fn**********************')
         img,label,img_path = list(zip(*batch))
 
         new_label=[]
@@ -111,18 +118,52 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 
     return new_img,new_label
 
+def debug_dataset(path,new_img,new_label):
+    """
+    debug处理后的图像和label是否正确
+    path:原始图像路径
+    new_img:处理后的img  hwc bgr
+    new_label:处理后的img上的label
+    """
+    print(new_img.shape,new_label.shape)
+    print('label:{}'.format(new_label))
+    name = path.split('/')[-1]
+    full_name = './input_imgs/{}'.format(name)
+    
+    img_h,img_w,c  = new_img.shape
+    x = new_label[:,1]
+    y = new_label[:,2]
+    w = new_label[:,3]
+    h = new_label[:,4]
+
+    lt_x = img_w * x - (img_w * w)/2
+    lt_y = img_h * y - (img_h * h)/2
+    rd_x = img_w * x + (img_w * w)/2
+    rd_y = img_h * y + (img_h * h)/2
+    box_num = lt_x.shape[0]
+    for i in range(box_num):
+        ltx = int(lt_x[i])
+        lty = int(lt_y[i])
+        rdx = int(rd_x[i])
+        rdy = int(rd_y[i])
+        print('({},{}) ({},{})'.format(ltx,lty,rdx,rdy))
+        cv2.rectangle(new_img, (ltx,lty), (rdx,rdy), (255,0,0))
+    cv2.imwrite(full_name,new_img)
+    print('save {}'.format(full_name))
+
 if __name__ == '__main__':
-    traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
+    traintxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
     dataset = LoadImagesAndLabels(traintxt)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=8,
+                                        batch_size=1,
                                         num_workers=4,
                                         shuffle=True,
                                         collate_fn=dataset.collate_fn)
     for data in dataloader:
         img,label,path = data
-        print(img.shape,label.shape,path)
-        # break
+        # print(img,label,path)
+
+        break
     # img = cv2.imread('/home/autocore/work/yolov3_darknet/lishui/images/1599039225trans4.png')
     # newimg = letter_box(img,desired_size=416)
     # print(newimg.shape)
