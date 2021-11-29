@@ -46,13 +46,17 @@ class YoloLoss(nn.Module):
                     # print('batch_idx={},anchor_idx={},grid_x={},grid_y={}'.format(batch_idx,anchor_idx,grid_x,grid_y))
                     mask_obj[batch_idx,anchor_idx,grid_y,grid_x] = True
                     gt_x[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,0] 
-                    
                     gt_y[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,1] 
                     gt_w[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,2] 
                     gt_h[batch_idx,anchor_idx,grid_y,grid_x] = gt_xywhc[j,3] 
+                    
 
                     c = gt_xywhc[j,4].long()
-                    gt_c[...,c] = True
+                    # print(c)
+                    gt_c[batch_idx,anchor_idx,grid_y,grid_x,c] = 1.
+                    # mask__ = (gt_c[...,:] == True)
+                    # print('gt_c :{}'.format(gt_c.shape))
+                    # print('mask sum:{}'.format(mask__.sum()))
 
             """
             conf loss
@@ -101,6 +105,16 @@ class YoloLoss(nn.Module):
             if mask_obj.sum() > 0:
                 pre_cls = yolo_out[...,5:]
                 lcls += BCEcls(pre_cls[mask_obj],gt_c[mask_obj])
+                
+                
+                pre_prob = pre_cls[mask_obj]
+                gt_prob = gt_c[mask_obj]
+                # print('gt_prob:{}'.format(gt_prob))
+                # print('pre_prob shape:{}'.format(pre_prob.shape))
+                # print('gt_prob shape:{}'.format(gt_prob.shape))
+                # correct = torch.where(pre_cls[mask_obj] > 0.1)
+                # correct_num = len(correct[0])
+                # print('correct_num={},mask_obj num={}'.format(correct_num,mask_obj.sum()))
 
         # print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf,lx,ly,lw,lh,lcls))
         return lconf,lx,ly,lw,lh,lcls

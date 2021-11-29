@@ -138,7 +138,7 @@ def nms(dets, thresh):
 
     return keep
 
-def plot_one_box(x, img, color=(255,0,0), label=None, line_thickness=None):
+def plot_one_box(x, img, color=(255,0,0), labels=None, line_thickness=None):
     # print('img shape:{},x:{}'.format(img.shape,x))
     # Plots one bounding box on image img
     tl = line_thickness or round(0.002 * (img.shape[0] + img.shape[1]) / 2) + 1  # line/font thickness
@@ -146,15 +146,17 @@ def plot_one_box(x, img, color=(255,0,0), label=None, line_thickness=None):
     # print('c1:{},c2:{}'.format(c1,c2))
     # cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
     cv2.rectangle(img, c1, c2, color)
-    if label:
-        tf = max(tl - 1, 1)  # font thickness
-        t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
-        c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-        cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
-        cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+    if len(labels) > 0:
+        for label in labels:
+            label = str(label)
+            tf = max(tl - 1, 1)  # font thickness
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+            cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
+            cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
 
-def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.6):
+def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.6,cls_prob=0.9):
     """
     return [[boxes of img1],[boxes of img2],....] 
     """
@@ -210,7 +212,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
             for i in range(final_box_num):
                 box = final_boxes[i,0:4]
                 # print('plot box on img************')
-                plot_one_box(box, cv_img, color=(255,0,0), label=None, line_thickness=None)
+
+                pre_cls_prob = final_boxes[i,5:]
+                det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
+                print('det_cls_idx:{}'.format(det_cls_idx))
+
+                plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
 
             cv2.imwrite(full_name,cv_img)
     
