@@ -2,10 +2,10 @@ from models.models import *
 from datasets.dataset import *
 from utils.utils import *
 
-def test(checkpoint_name,conf_thre=0.9,iou_thre=0.6):
+def test(checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
     testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
     print('test begin,testtxt:{}'.format(testtxt))
-    dataset = LoadImagesAndLabels(testtxt,imgsize=416)
+    dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=1,
                                             num_workers=1,
@@ -43,10 +43,11 @@ def test(checkpoint_name,conf_thre=0.9,iou_thre=0.6):
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-model_path', type=str, default='checkpoints/epoch200.pt', help='model name')
+    parser.add_argument('-model_path', type=str, default='checkpoints/epoch500.pt', help='model name')
+    parser.add_argument('-model_input_size', type=int, default=416, help='model input size')
     opt = parser.parse_args()
     print(opt.model_path)
-    test(opt.model_path)
+    test(opt.model_path,opt.model_input_size)
 
 
 

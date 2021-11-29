@@ -150,10 +150,66 @@ def plot_one_box(x, img, color=(255,0,0), labels=None, line_thickness=None):
         for label in labels:
             label = str(label)
             tf = max(tl - 1, 1)  # font thickness
-            t_size = cv2.getTextSize(label, 0, fontScale=tl / 3, thickness=tf)[0]
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 8, thickness=tf)[0]
             c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
             cv2.rectangle(img, c1, c2, color, -1, cv2.LINE_AA)  # filled
-            cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 3, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+            cv2.putText(img, label, (c1[0], c1[1] - 2), 0, tl / 8, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+
+def plot_one_box_on_origin_img(x, origin_cv_img, model_input_size=416,color=(255,0,0), labels=None, line_thickness=None):
+    """
+    x代表的Box的位置是相对于做了处理的输入模型的图片的.
+    origin_cv_img是未做处理的原始图片.
+    """
+    c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+    center_x,center_y = (c1[0] + c2[0])/2,(c1[1] + c2[1])/2
+    box_w,box_h = c2[0] - c1[0],c2[1]-c1[1]
+    print('center_x:{},center_y:{},box_w:{},box_h:{}'.format(center_x,center_y,box_w,box_h))
+
+
+    h,w,c = origin_cv_img.shape
+    if h/model_input_size > w/model_input_size:
+        #在w方向上做padding
+        r = model_input_size / h
+        new_w = int(w * r)
+        padding_x = (w - new_w)/2
+
+        center_x = center_x - padding_x
+
+        center_x_in_origin_img = center_x * w/new_w 
+        center_y_in_origin_img = center_y * w/new_w
+        box_w_in_origin_img = box_w/r
+        box_h_in_origin_img = box_h/r
+    else:
+        #在h方向上做padding
+        r = model_input_size / w
+        
+        new_h = int(h * r)
+        padding_y = (model_input_size - new_h)/2
+        
+        center_y = center_y - padding_y
+
+        center_x_in_origin_img = center_x * h/new_h 
+        center_y_in_origin_img = center_y * h/new_h
+        box_w_in_origin_img = box_w/r
+        box_h_in_origin_img = box_h/r
+
+    c1 = (int(center_x_in_origin_img-box_w_in_origin_img/2),int(center_y_in_origin_img-box_h_in_origin_img/2))
+    c2 = (int(center_x_in_origin_img+box_w_in_origin_img/2),int(center_y_in_origin_img+box_h_in_origin_img/2))
+
+    tl = line_thickness or round(0.002 * (origin_cv_img.shape[0] + origin_cv_img.shape[1]) / 2) + 1  # line/font thickness
+    # c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
+    # print('c1:{},c2:{}'.format(c1,c2))
+    # cv2.rectangle(img, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
+    cv2.rectangle(origin_cv_img, c1, c2, color)
+    if len(labels) > 0:
+        for label in labels:
+            label = str(label)
+            tf = max(tl - 1, 1)  # font thickness
+            t_size = cv2.getTextSize(label, 0, fontScale=tl / 8, thickness=tf)[0]
+            c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
+            cv2.rectangle(origin_cv_img, c1, c2, color, -1, cv2.LINE_AA)  # filled
+            cv2.putText(origin_cv_img, label, (c1[0], c1[1] - 2), 0, tl / 8, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
+
 
 
 def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.6,cls_prob=0.9):
@@ -166,6 +222,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
     detections = [[]] * bs
 
     for i in range(bs):
+        origin_cv_img = cv2.imread(imgs_path[i])
         img_name = (imgs_path[i]).split('/')[-1]
         # print(img_name)
         cur_path =  os.path.abspath(os.path.dirname(__file__))
@@ -217,9 +274,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
                 det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
                 print('det_cls_idx:{}'.format(det_cls_idx))
 
-                plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
+                # plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
+                plot_one_box_on_origin_img(box, origin_cv_img,model_input_size=img_size, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
 
-            cv2.imwrite(full_name,cv_img)
+            # cv2.imwrite(full_name,cv_img)
+            cv2.imwrite(full_name,origin_cv_img)
+            
     
     return detections
 
