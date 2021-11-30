@@ -31,7 +31,7 @@ class  LoadImagesAndLabels(Dataset):
         # load image
         img_path = self.img_files[index]
         # print('__getitem__:{}'.format(img_path))
-        img = cv2.imread(img_path)   
+        img = cv2.imread(img_path) 
         
         # load label
         label_path = self.label_files[index]
@@ -43,8 +43,11 @@ class  LoadImagesAndLabels(Dataset):
         except:
             raise Exception('{} does not exist'.format(label_path))
         
+        # print('before letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
         new_img,new_label = letter_box(img,label,desired_size=416)
-
+        # print('after letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
+        if new_img.shape[0] != 416 or new_img.shape[1] != 416:
+            print('************************')
         # debug_dataset(img_path,new_img,new_label)
 
         new_img = new_img[:,:,::-1] #bgr->rgb
@@ -80,14 +83,12 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
     old_size = img.shape[:2] # old_size is in (height, width) format
 
     ratio = float(desired_size)/max(old_size)
-    new_size = tuple([1+int(x*ratio) for x in old_size])
-    new_size = (min(new_size[0],desired_size),min(new_size[1],desired_size))
-    #避免出现new_size处理后变为417这种情况.
-    if ratio != 1:
-        interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
-        #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
-        img = cv2.resize(img,(new_size[1],new_size[0]),interpolation=cv2.INTER_AREA)
-        # 这里只改变了img的尺寸.宽高比是没有变化的
+    new_size = tuple([round(x*ratio) for x in old_size])
+    
+    interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
+    #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
+    img = cv2.resize(img,(new_size[1],new_size[0]),interpolation=cv2.INTER_AREA)
+    # 这里只改变了img的尺寸.宽高比是没有变化的
 
     # new_size should be in (width, height) format
     # im = cv2.resize(img, (new_size[1], new_size[0]))
@@ -111,7 +112,8 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
         value=color)
     # print('new_img shape:{}'.format(new_img.shape))
     new_img_h,new_img_w = new_img.shape[:2]
-
+    if new_img_h != desired_size:
+        print('img:{},top:{},bottom:{},left:{},right:{}'.format(img.shape,top,bottom,left,right))
     new_label = label    
     # c x y w h
     new_label[:,1] = (left  + box_x)/new_img_w
@@ -119,6 +121,7 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
     new_label[:,3] = box_w/new_img_w
     new_label[:,4] = box_h/new_img_h
 
+    # print('after letter_box img shape:{}'.format(new_img.shape))
     return new_img,new_label
 
 def debug_dataset(path,new_img,new_label):
@@ -151,18 +154,20 @@ import datetime
 if __name__ == '__main__':
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
+    # traintxt = 'coco/debug2017.txt'
     traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
     dataset = LoadImagesAndLabels(traintxt)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=16,
-                                        num_workers=4,
+                                        batch_size=64,
+                                        num_workers=1,
                                         shuffle=True,
-                                        collate_fn=dataset.collate_fn)
+                                        collate_fn=dataset.collate_fn
+                                        )
     start=datetime.datetime.now()
     for data in dataloader:
         img,label,path = data
-        print(path)
+        # print(path)
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
         # break
