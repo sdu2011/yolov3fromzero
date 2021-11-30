@@ -315,11 +315,11 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
     return inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
-def metric(detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
+def metric(APs,detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
     """
     labels: [n,6] 6:img_idx,xywhc
+    iou_thre:默认0.5 与真实框iou超过该值则认为匹配成功
     """
-    APs = []
     bs = len(detections)
     for i in range(bs):  
         correct = []
@@ -403,7 +403,7 @@ def metric(detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
     
     print('************mAP={}*****************'.format(np.mean(APs)))
 
-
+    return 
 
 
 

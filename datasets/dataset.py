@@ -17,7 +17,7 @@ class  LoadImagesAndLabels(Dataset):
         
         self.img_files = lines
         self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt') for x in self.img_files] 
-        print(self.label_files)
+        # print(self.label_files)
 
     def __len__(self):
         return len(self.img_files)
@@ -30,6 +30,7 @@ class  LoadImagesAndLabels(Dataset):
 
         # load image
         img_path = self.img_files[index]
+        # print('__getitem__:{}'.format(img_path))
         img = cv2.imread(img_path)   
         
         # load label
@@ -80,6 +81,8 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 
     ratio = float(desired_size)/max(old_size)
     new_size = tuple([1+int(x*ratio) for x in old_size])
+    new_size = (min(new_size[0],desired_size),min(new_size[1],desired_size))
+    #避免出现new_size处理后变为417这种情况.
     if ratio != 1:
         interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
         #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
@@ -99,11 +102,11 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
     # print(box_x.shape,box_y.shape,box_w.shape,box_h.shape)
     # 这里是绝对尺度.不是比例
 
-    delta_w = desired_size - new_size[1]
-    delta_h = desired_size - new_size[0]
+    delta_w = max(0,desired_size - new_size[1])
+    delta_h = max(0,desired_size - new_size[0])
     top, bottom = delta_h//2, delta_h-(delta_h//2)
     left, right = delta_w//2, delta_w-(delta_w//2)
-
+    # print('top:{},bottom:{},left:{},right:{}'.format(top,bottom,left,right))
     new_img = cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT,
         value=color)
     # print('new_img shape:{}'.format(new_img.shape))
@@ -144,18 +147,24 @@ def debug_dataset(path,new_img,new_label):
     cv2.imwrite(full_name,new_img)
     print('save {}'.format(full_name))
 
+import datetime
 if __name__ == '__main__':
-    traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
+    # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
+    root_dir=os.getcwd()
+    traintxt = 'coco/train2017.txt'
+    traintxt = root_dir + '/' + traintxt
     dataset = LoadImagesAndLabels(traintxt)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=1,
+                                        batch_size=16,
                                         num_workers=4,
                                         shuffle=True,
                                         collate_fn=dataset.collate_fn)
+    start=datetime.datetime.now()
     for data in dataloader:
         img,label,path = data
-        # print(img,label,path)
-
+        print(path)
+    end=datetime.datetime.now()
+    print('耗时{}'.format(end - start))
         # break
     # img = cv2.imread('/home/autocore/work/yolov3_darknet/lishui/images/1599039225trans4.png')
     # newimg = letter_box(img,desired_size=416)

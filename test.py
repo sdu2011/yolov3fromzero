@@ -2,12 +2,13 @@ from models.models import *
 from datasets.dataset import *
 from utils.utils import *
 
-def test(checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
-    testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
+def test(testtxt,checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
+    # testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
+
     print('test begin,testtxt:{}'.format(testtxt))
     dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                            batch_size=1,
+                                            batch_size=16,
                                             num_workers=1,
                                             shuffle=True,
                                             collate_fn=dataset.collate_fn)
@@ -22,6 +23,7 @@ def test(checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
 
     # yolov3net.eval()
     yolov3net.eval()
+    APs=[]
     for data in dataloader:
         imgs,labels,imgs_path = data
         imgs = imgs.to(device)
@@ -36,18 +38,18 @@ def test(checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
             # print('yolo_out shape={}'.format(yolo_outs[0].shape))
             
             detections = post_process(imgs,imgs_path,yolo_outs,img_size=img_size,conf_thre=conf_thre,iou_thre=iou_thre)
-            metric(detections,labels,img_size)
-
-
+            metric(APs,detections,labels,img_size)
+    print('mAP={}'.format(np.mean(APs)))
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument('-model_path', type=str, default='checkpoints/epoch500.pt', help='model name')
     parser.add_argument('-model_input_size', type=int, default=416, help='model input size')
+    parser.add_argument('-testtxt', type=str,default='coco/val2017.txt', help='testing txt')
     opt = parser.parse_args()
     print(opt.model_path)
-    test(opt.model_path,opt.model_input_size)
+    test(opt.testtxt,opt.model_path,opt.model_input_size)
 
 
 
