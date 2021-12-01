@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416):
+    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo'):
         super().__init__()
         self.imgsize = imgsize
         try:
@@ -18,6 +18,8 @@ class  LoadImagesAndLabels(Dataset):
         self.img_files = lines
         self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt') for x in self.img_files] 
         # print(self.label_files)
+        self.debug = debug
+        self.label_type=label_type
 
     def __len__(self):
         return len(self.img_files)
@@ -43,12 +45,34 @@ class  LoadImagesAndLabels(Dataset):
         except:
             raise Exception('{} does not exist'.format(label_path))
         
+        if self.label_type == 'coco':
+                h,w = img.shape[0],img.shape[1]
+
+                box_lt_x = label[...,1]
+                box_lt_y = label[...,2]
+                box_rd_x = label[...,3]
+                box_rd_y = label[...,4]
+
+                box_center_x = (box_lt_x + box_rd_x)/2
+                box_center_y = (box_lt_y + box_rd_y)/2
+                box_w = (box_rd_x - box_lt_x)
+                box_h = (box_rd_y - box_lt_y)
+
+                label[...,1] = box_center_x/w
+                label[...,2] = box_center_y/h
+                label[...,3] = box_w/w
+                label[...,4] = box_h/h
+
+                # print(label)
+
         # print('before letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
         new_img,new_label = letter_box(img,label,desired_size=416)
         # print('after letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
         if new_img.shape[0] != 416 or new_img.shape[1] != 416:
             print('************************')
-        # debug_dataset(img_path,new_img,new_label)
+
+        if self.debug:
+            debug_dataset(img_path,new_img,new_label)
 
         new_img = new_img[:,:,::-1] #bgr->rgb
         new_img = new_img.transpose( 2, 0, 1)  #hwc-chw
@@ -132,6 +156,7 @@ def debug_dataset(path,new_img,new_label):
     new_label:处理后的img上的label
     """
     print(new_img.shape,new_label.shape)
+    print('new_label={}'.format(new_label))
     name = path.split('/')[-1]
     full_name = './input_imgs/{}'.format(name)
     
@@ -141,12 +166,22 @@ def debug_dataset(path,new_img,new_label):
     w = new_label[:,3]
     h = new_label[:,4]
 
+    # print(x,y,w,h)
+
     lt_x = img_w * x - (img_w * w)/2
     lt_y = img_h * y - (img_h * h)/2
     rd_x = img_w * x + (img_w * w)/2
     rd_y = img_h * y + (img_h * h)/2
 
-    cv2.rectangle(new_img, (lt_x,lt_y), (rd_x,rd_y), (255,0,0))
+    # print('lt_x:{},lt_y:{},rd_x:{},rd_y:{}'.format(lt_x,lt_y,rd_x,rd_y))
+
+    box_num = new_label.shape[0]
+    for i in range(box_num):
+        c1 = (int(lt_x[i]),int(lt_y[i]))
+        c2 = (int(rd_x[i]),int(rd_y[i]))
+        print('c1:{},c2:{}'.format(c1,c2))
+        cv2.rectangle(new_img, c1, c2, (255,0,0))
+    
     cv2.imwrite(full_name,new_img)
     print('save {}'.format(full_name))
 
@@ -154,20 +189,24 @@ import datetime
 if __name__ == '__main__':
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
-    # traintxt = 'coco/debug2017.txt'
+    traintxt = 'coco/debug2017.txt'
     traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt)
+    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo')
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=64,
+                                        batch_size=16,
                                         num_workers=1,
                                         shuffle=True,
                                         collate_fn=dataset.collate_fn
                                         )
     start=datetime.datetime.now()
-    for data in dataloader:
+    for i,data in enumerate(dataloader):
         img,label,path = data
-        # print(path)
+        print(path)
+        
+        if i > 100:
+            break
+
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
         # break

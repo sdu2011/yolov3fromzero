@@ -2,9 +2,9 @@ from models.models import *
 from datasets.dataset import *
 from utils.utils import *
 
-def test(testtxt,checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
+def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre):
     # testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
-
+    start=datetime.datetime.now()
     print('test begin,testtxt:{}'.format(testtxt))
     dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size)
     dataloader = torch.utils.data.DataLoader(dataset,
@@ -14,7 +14,7 @@ def test(testtxt,checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
                                             collate_fn=dataset.collate_fn)
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
-    yolov3net = Yolov3('cfg/yolov3_tlr.cfg')
+    yolov3net = Yolov3(cfg)
     yolov3net = yolov3net.to(device)
     #
     checkpoint = torch.load(checkpoint_name)
@@ -38,18 +38,24 @@ def test(testtxt,checkpoint_name,model_input_size,conf_thre=0.9,iou_thre=0.6):
             # print('yolo_out shape={}'.format(yolo_outs[0].shape))
             
             detections = post_process(imgs,imgs_path,yolo_outs,img_size=img_size,conf_thre=conf_thre,iou_thre=iou_thre)
-            metric(APs,detections,labels,img_size)
+            metric(APs,detections,labels,img_size,iou_thre,cls_thre=0.8)
     print('mAP={}'.format(np.mean(APs)))
+    end=datetime.datetime.now()
+    print('耗时{}'.format(end - start))
 
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument('-model_path', type=str, default='checkpoints/epoch500.pt', help='model name')
+    parser.add_argument('-model_path', type=str, default='checkpoints/epoch0.pt', help='model name')
     parser.add_argument('-model_input_size', type=int, default=416, help='model input size')
     parser.add_argument('-testtxt', type=str,default='coco/val2017.txt', help='testing txt')
+    parser.add_argument('-cfg', type=str,default='cfg/yolov3.cfg', help='training cfg')
+    parser.add_argument('-conf_thre', type=float,default=0.7, help='confidence threshold')
+    parser.add_argument('-iou_thre', type=float,default=0.5, help='iou threshold')
+    parser.add_argument('-cls_thre', type=float,default=0.7, help='class threshold')
     opt = parser.parse_args()
     print(opt.model_path)
-    test(opt.testtxt,opt.model_path,opt.model_input_size)
+    test(opt.cfg,opt.testtxt,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre)
 
 
 

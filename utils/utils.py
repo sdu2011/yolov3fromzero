@@ -160,10 +160,16 @@ def plot_one_box_on_origin_img(x, origin_cv_img, model_input_size=416,color=(255
     x代表的Box的位置是相对于做了处理的输入模型的图片的.
     origin_cv_img是未做处理的原始图片.
     """
+    h,w = origin_cv_img.shape[0],origin_cv_img.shape[1]
+    if x[0] > w or x[1] > h or x[2] > w or x[3] > h:
+        return
+    #由于模型的输出并未对w,h做限制.所以要防止w,h预测错误的情况.
+
     c1, c2 = (int(x[0]), int(x[1])), (int(x[2]), int(x[3]))
     center_x,center_y = (c1[0] + c2[0])/2,(c1[1] + c2[1])/2
     box_w,box_h = c2[0] - c1[0],c2[1]-c1[1]
-    print('center_x:{},center_y:{},box_w:{},box_h:{}'.format(center_x,center_y,box_w,box_h))
+    # print('center_x:{},center_y:{},box_w:{},box_h:{}'.format(center_x,center_y,box_w,box_h))
+
 
 
     h,w,c = origin_cv_img.shape
@@ -212,8 +218,11 @@ def plot_one_box_on_origin_img(x, origin_cv_img, model_input_size=416,color=(255
 
 
 
-def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.6,cls_prob=0.9):
+def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.7,iou_thre=0.6,cls_prob=0.8):
     """
+    conf_thre: 超过该值则认为有目标
+    iou_thre： 超过该值则认为两个box需要做nms
+    cls_prob: 类别概率超过该值才认为是该类别
     return [[boxes of img1],[boxes of img2],....] 
     """
     output = torch.cat(yolo_outs,dim=1)
@@ -224,7 +233,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
     for i in range(bs):
         origin_cv_img = cv2.imread(imgs_path[i])
         img_name = (imgs_path[i]).split('/')[-1]
-        # print(img_name)
+        print(img_name)
         cur_path =  os.path.abspath(os.path.dirname(__file__))
         full_name = '{}/../out_imgs/{}'.format(cur_path,img_name)
         # print(full_name) 
@@ -252,11 +261,11 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
             boxes[...,3] = box_rb_y
 
             boxes = boxes.cpu().numpy()
-            # print('predict boxes num={}'.format(boxes.shape[0]))
+            print('predict boxes num={}'.format(boxes.shape[0]))
             keep = nms(boxes, iou_thre)
             
             final_boxes = boxes[keep]
-            # print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
+            print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
             detections[i].append(final_boxes)
 
             cv_img = imgs[i,...].cpu().numpy()
@@ -272,7 +281,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.9,iou_thre=0.
 
                 pre_cls_prob = final_boxes[i,5:]
                 det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
-                print('det_cls_idx:{}'.format(det_cls_idx))
+                # print('det_cls_idx:{}'.format(det_cls_idx))
 
                 # plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
                 plot_one_box_on_origin_img(box, origin_cv_img,model_input_size=img_size, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
@@ -315,10 +324,12 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
     return inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
-def metric(APs,detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
+def metric(APs,detections,labels,img_size,iou_thre,cls_thre):
     """
+    统计一个batch内的AP,添加到APs.
     labels: [n,6] 6:img_idx,xywhc
     iou_thre:默认0.5 与真实框iou超过该值则认为匹配成功
+    cls_thre:默认0.8 超过该值则认为类别判断正确
     """
     bs = len(detections)
     for i in range(bs):  
@@ -399,9 +410,9 @@ def metric(APs,detections,labels,img_size,iou_thre=0.5,cls_thre=0.8):
             AP = compute_ap(recall,precision)
             APs.append(AP)
 
-            print('img{} in this batch,recall:{},precision:{},AP:{}'.format(i,recall[-1],precision[-1],AP))
+            # print('img{} in this batch,recall:{},precision:{},AP:{}'.format(i,recall[-1],precision[-1],AP))
     
-    print('************mAP={}*****************'.format(np.mean(APs)))
+    # print('************mAP={}*****************'.format(np.mean(APs)))
 
     return 
 

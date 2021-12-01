@@ -14,6 +14,7 @@ mkdir out_imgs
 ## 检测train.txt里是否有不存在label的图片
 python coco/check_traintxt.py
 如果有,修正traintxt. 新的文件命名为xxx.new
+label的格式默认为yolo的格式. cxywh xywh为比例.
 
 ## 测试数据处理
 python dataset/dataset.py

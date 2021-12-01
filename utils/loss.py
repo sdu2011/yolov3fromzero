@@ -13,6 +13,7 @@ class YoloLoss(nn.Module):
         """
         FT = torch.cuda.FloatTensor if yolo_outs[0].is_cuda else torch.FloatTensor
         lx, ly, lw, lh, lcls, lconf = FT([0]), FT([0]), FT([0]), FT([0]), FT([0]), FT([0])
+        pt_conf,nt_conf = FT([0]),FT([0])
 
         BCEconf = nn.BCEWithLogitsLoss(reduction='mean')
         BCEcls = nn.BCEWithLogitsLoss(reduction='mean')
@@ -69,11 +70,13 @@ class YoloLoss(nn.Module):
                 # print('conf_pre[mask_obj]:{}'.format(torch.sigmoid(conf_pre[mask_obj])))
                 # print('pos_conf_loss={}'.format(pos_conf_loss))
                 #该预测出目标的位置要预测出目标 conf趋向1
+                pt_conf += pos_conf_loss
             if((~mask_obj).sum() > 0):
                 neg_conf_loss = BCEconf(conf_pre[~mask_obj],mask_obj[~mask_obj].float())
                 lconf += neg_weight * neg_conf_loss
                 # print('neg_conf_loss={}'.format(neg_conf_loss))
                 #不该预测出目标的位置要预测出无目标. conf趋向0.
+                nt_conf += neg_conf_loss
             # print('pos_conf_loss:{},neg_conf_loss:{}'.format(pos_conf_loss,neg_conf_loss))
 
             """
@@ -117,7 +120,7 @@ class YoloLoss(nn.Module):
                 # print('correct_num={},mask_obj num={}'.format(correct_num,mask_obj.sum()))
 
         # print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf,lx,ly,lw,lh,lcls))
-        return lconf,lx,ly,lw,lh,lcls
+        return lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf
 
     def match_gtbox_to_yololayer(self,targets,yolo_outs,threshold=0.5):
         """

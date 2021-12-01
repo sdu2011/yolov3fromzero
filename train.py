@@ -8,10 +8,15 @@ import test
 parser = argparse.ArgumentParser()
 parser.add_argument('-epochs', type=int, default=0, help='number of epochs')
 parser.add_argument('-resume', default=False, help='resume training flag')
-parser.add_argument('-batchsize', type=int,default=16, help='training batch size')
+parser.add_argument('-batchsize', type=int,default=48, help='training batch size')
 parser.add_argument('-cfg', type=str,default='cfg/yolov3.cfg', help='training cfg')
 parser.add_argument('-traintxt', type=str,default='coco/train2017.txt', help='training txt')
 parser.add_argument('-testtxt', type=str,default='coco/val2017.txt', help='testing txt')
+parser.add_argument('-model_input_size', type=int,default=416, help='model_input_size')
+parser.add_argument('-conf_thre', type=float,default=0.7, help='confidence threshold')
+parser.add_argument('-iou_thre', type=float,default=0.5, help='iou threshold')
+parser.add_argument('-cls_thre', type=float,default=0.7, help='class threshold')
+parser.add_argument('-conf_loss_weights', type=int,default=2, help='conf loss weights')
 opt = parser.parse_args()
 print(opt)
 
@@ -19,11 +24,10 @@ if __name__ == '__main__':
     # Dataset
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
-    traintxt = 'coco/train2017.txt'
-    traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt,imgsize=416)
+    traintxt = root_dir + '/' + opt.traintxt
+    dataset = LoadImagesAndLabels(traintxt,imgsize=opt.model_input_size)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                            batch_size=32,
+                                            batch_size=opt.batchsize,
                                             num_workers=4,
                                             shuffle=True,
                                             collate_fn=dataset.collate_fn)
@@ -46,7 +50,7 @@ if __name__ == '__main__':
     yolov3net.train()
     loss = YoloLoss(yolov3net)
 
-    for epoch in range(start_epoch,100):    
+    for epoch in range(start_epoch,1000):    
         print('epoch {}'.format(epoch))
         t0 = time.time()
         for i,data in enumerate(dataloader):
@@ -58,10 +62,11 @@ if __name__ == '__main__':
             yolo_out = yolov3net(imgs)
             # print([out.shape for out in yolo_out])
 
-            lconf,lx,ly,lw,lh,lcls = loss.compute_loss(yolo_out,labels,neg_weight=5)
-            total_loss = 2* lconf + 2 * lx + 2 * ly + lw + lh + lcls
+            lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf = loss.compute_loss(yolo_out,labels,neg_weight=5)
+            total_loss = opt.conf_loss_weights * lconf + 2 * lx + 2 * ly + lw + lh + lcls
             # print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf.item(),lx.item(),ly.item(),lw.item(),lh.item(),lcls.item()))
-            print('batch{},total_loss={}'.format(i,total_loss.item()))
+            print('img:{},total_loss={},lconf:{},pt_conf:{},nt_conf:{}'.format(
+                (1+i)*opt.batchsize,total_loss.item(),lconf.item(),pt_conf.item(),nt_conf.item()))
             optimizer.zero_grad() #清空梯度
             total_loss.backward() #反向传播
             optimizer.step()      #更新参数
@@ -72,9 +77,13 @@ if __name__ == '__main__':
         checkpoint = {'epoch':epoch,
                       'model':yolov3net.state_dict(),
                       'optimizer':optimizer.state_dict()}
-        if epoch % 10 == 0:
+        if epoch % 1 == 0:
             checkpoint_name = 'checkpoints/epoch{}.pt'.format(epoch)
             torch.save(checkpoint,checkpoint_name)
 
-            test.test(opt.testtxt,checkpoint_name)
+        if epoch % 10 == 0:
+            test.test(opt.cfg,opt.testtxt,checkpoint_name,opt.model_input_size,
+                      opt.conf_thre,opt.iou_thre,opt.cls_thre)
         
+        if lconf.item() < 1:
+            break
