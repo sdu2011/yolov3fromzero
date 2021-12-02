@@ -1,6 +1,7 @@
 from models.models import *
 from datasets.dataset import *
 from utils.loss import *
+from utils.utils import *
 import time
 import argparse
 import test
@@ -17,8 +18,10 @@ parser.add_argument('-conf_thre', type=float,default=0.7, help='confidence thres
 parser.add_argument('-iou_thre', type=float,default=0.5, help='iou threshold')
 parser.add_argument('-cls_thre', type=float,default=0.7, help='class threshold')
 parser.add_argument('-conf_loss_weights', type=int,default=2, help='conf loss weights')
+parser.add_argument('-cls_names_path', type=str,default='coco/names', help='class names file')
 opt = parser.parse_args()
 print(opt)
+cls_names = load_classes(opt.cls_names_path)
 
 if __name__ == '__main__':
     # Dataset
@@ -50,7 +53,7 @@ if __name__ == '__main__':
     yolov3net.train()
     loss = YoloLoss(yolov3net)
 
-    for epoch in range(start_epoch,1000):    
+    for epoch in range(start_epoch,100000):    
         print('epoch {}'.format(epoch))
         t0 = time.time()
         for i,data in enumerate(dataloader):
@@ -77,13 +80,13 @@ if __name__ == '__main__':
         checkpoint = {'epoch':epoch,
                       'model':yolov3net.state_dict(),
                       'optimizer':optimizer.state_dict()}
-        if epoch % 1 == 0:
+        if epoch % 5 == 0:
             checkpoint_name = 'checkpoints/epoch{}.pt'.format(epoch)
             torch.save(checkpoint,checkpoint_name)
 
         if epoch % 10 == 0:
             test.test(opt.cfg,opt.testtxt,checkpoint_name,opt.model_input_size,
-                      opt.conf_thre,opt.iou_thre,opt.cls_thre)
+                      opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
         
-        if lconf.item() < 1:
+        if lconf.item() < 0.1:
             break

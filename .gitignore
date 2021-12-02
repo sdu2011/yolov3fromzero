@@ -139,3 +139,6 @@ coco/5k.txt
 coco/README.txt
 cfg/test.txt
 cfg/*.bak
+*.npy
+*.cache
+.vscode/*

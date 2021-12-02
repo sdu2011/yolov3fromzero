@@ -170,8 +170,6 @@ def plot_one_box_on_origin_img(x, origin_cv_img, model_input_size=416,color=(255
     box_w,box_h = c2[0] - c1[0],c2[1]-c1[1]
     # print('center_x:{},center_y:{},box_w:{},box_h:{}'.format(center_x,center_y,box_w,box_h))
 
-
-
     h,w,c = origin_cv_img.shape
     if h/model_input_size > w/model_input_size:
         #在w方向上做padding
@@ -216,9 +214,7 @@ def plot_one_box_on_origin_img(x, origin_cv_img, model_input_size=416,color=(255
             cv2.rectangle(origin_cv_img, c1, c2, color, -1, cv2.LINE_AA)  # filled
             cv2.putText(origin_cv_img, label, (c1[0], c1[1] - 2), 0, tl / 8, [225, 255, 255], thickness=tf, lineType=cv2.LINE_AA)
 
-
-
-def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.7,iou_thre=0.6,cls_prob=0.8):
+def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,cls_names):
     """
     conf_thre: 超过该值则认为有目标
     iou_thre： 超过该值则认为两个box需要做nms
@@ -282,9 +278,10 @@ def post_process(imgs,imgs_path,yolo_outs,img_size=416,conf_thre=0.7,iou_thre=0.
                 pre_cls_prob = final_boxes[i,5:]
                 det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
                 # print('det_cls_idx:{}'.format(det_cls_idx))
+                det_cls_name = [cls_names[idx] for idx in det_cls_idx]
 
                 # plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
-                plot_one_box_on_origin_img(box, origin_cv_img,model_input_size=img_size, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
+                plot_one_box_on_origin_img(box, origin_cv_img,model_input_size=img_size, color=(255,0,0), labels=det_cls_name, line_thickness=None)
 
             # cv2.imwrite(full_name,cv_img)
             cv2.imwrite(full_name,origin_cv_img)
@@ -416,7 +413,11 @@ def metric(APs,detections,labels,img_size,iou_thre,cls_thre):
 
     return 
 
-
+def load_classes(path):
+    # Loads *.names file at 'path'
+    with open(path, 'r') as f:
+        names = f.read().split('\n')
+    return list(filter(None, names))  # filter removes empty strings (such as last line)
 
 if __name__ == '__main__':
     pass

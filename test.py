@@ -2,7 +2,7 @@ from models.models import *
 from datasets.dataset import *
 from utils.utils import *
 
-def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre):
+def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre,cls_names):
     # testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
     start=datetime.datetime.now()
     print('test begin,testtxt:{}'.format(testtxt))
@@ -37,8 +37,8 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
             yolo_outs = yolov3net(imgs)
             # print('yolo_out shape={}'.format(yolo_outs[0].shape))
             
-            detections = post_process(imgs,imgs_path,yolo_outs,img_size=img_size,conf_thre=conf_thre,iou_thre=iou_thre)
-            metric(APs,detections,labels,img_size,iou_thre,cls_thre=0.8)
+            detections = post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_thre,cls_names)
+            metric(APs,detections,labels,img_size,iou_thre,cls_thre)
     print('mAP={}'.format(np.mean(APs)))
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
@@ -53,9 +53,12 @@ if __name__ == '__main__':
     parser.add_argument('-conf_thre', type=float,default=0.7, help='confidence threshold')
     parser.add_argument('-iou_thre', type=float,default=0.5, help='iou threshold')
     parser.add_argument('-cls_thre', type=float,default=0.7, help='class threshold')
+    parser.add_argument('-cls_names_path', type=str,default='coco/names', help='class names file')
     opt = parser.parse_args()
     print(opt.model_path)
-    test(opt.cfg,opt.testtxt,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre)
+
+    cls_names = load_classes(opt.cls_names_path)
+    test(opt.cfg,opt.testtxt,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
 
 
 

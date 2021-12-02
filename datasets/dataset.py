@@ -5,7 +5,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo'):
+    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=False):
         super().__init__()
         self.imgsize = imgsize
         try:
@@ -20,6 +20,7 @@ class  LoadImagesAndLabels(Dataset):
         # print(self.label_files)
         self.debug = debug
         self.label_type=label_type
+        self.aug=aug
 
     def __len__(self):
         return len(self.img_files)
@@ -64,6 +65,13 @@ class  LoadImagesAndLabels(Dataset):
                 label[...,4] = box_h/h
 
                 # print(label)
+
+        if self.aug:
+                transformed_image,transformed_bboxes,transformed_classes = augment_image(img,label)
+                img = transformed_image[:,:,::-1] #rgb-->bgr
+                label[...,0] = np.array(transformed_classes)
+                label[...,1:] = np.array(transformed_bboxes)
+                #对img的赋值不要放在augment_image里写. 注意python传参传引用的区别.
 
         # print('before letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
         new_img,new_label = letter_box(img,label,desired_size=416)
@@ -148,6 +156,49 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
     # print('after letter_box img shape:{}'.format(new_img.shape))
     return new_img,new_label
 
+import albumentations as A
+import random
+def augment_image(img,label):
+    """
+    img,label:ndarray
+    """
+    img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    #albumentations用的是rgb顺序
+    
+    transform = A.Compose([
+        # A.RandomCrop(),
+        A.HorizontalFlip(p=0.5),
+        A.RandomBrightnessContrast(p=0.6),
+        # A.RandomRotate90(),
+        A.Rotate(limit=25, p=0.2),  # 限制旋转角度为25度
+        A.GaussNoise(p=0.5),
+        A.GlassBlur(p=0.5),
+        A.RandomGamma(p=0.5),
+        # A.RandomRain(p=0.1),
+        # A.RandomSunFlare(p=0.1),
+        # A.CenterCrop(height=50,width=50) #从图像中间裁剪出h*w的区域
+        ], bbox_params=A.BboxParams(format='yolo', label_fields=['category_ids']))
+    
+    box_num = label.shape[0]
+    bboxes = [[]]*box_num
+    category_ids = []
+
+    # print(label)
+    for i in range(box_num):
+        cls,x,y,w,h =label[i,0],label[i,1],label[i,2],label[i,3],label[i,4]
+        bboxes[i] = [x,y,w,h]
+        category_ids.append(cls)
+    print('bboxes:{}'.format(bboxes))
+
+    random.seed()
+    transformed = transform(image=img_rgb, bboxes=bboxes, category_ids=category_ids)
+    transformed_image = transformed['image']
+    transformed_bboxes = transformed['bboxes']
+    transformed_classes = transformed['category_ids']
+
+    # print(label)
+    return transformed_image,transformed_bboxes,transformed_classes
+
 def debug_dataset(path,new_img,new_label):
     """
     debug处理后的图像和label是否正确
@@ -189,12 +240,12 @@ import datetime
 if __name__ == '__main__':
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
-    traintxt = 'coco/debug2017.txt'
-    traintxt = 'coco/train2017.txt'
+    traintxt = 'coco/debug_train2017.txt'
+    # traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo')
+    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=True)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=16,
+                                        batch_size=1,
                                         num_workers=1,
                                         shuffle=True,
                                         collate_fn=dataset.collate_fn
@@ -204,7 +255,7 @@ if __name__ == '__main__':
         img,label,path = data
         print(path)
         
-        if i > 100:
+        if i > 10:
             break
 
     end=datetime.datetime.now()

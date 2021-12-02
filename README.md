@@ -21,3 +21,8 @@ python dataset/dataset.py
 
 ## 训练
 python train.py
+
+
+# 数据增强库bug
+https://github.com/albumentations-team/albumentations/issues/459#issuecomment-734454278
+
