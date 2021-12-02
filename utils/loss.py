@@ -1,30 +1,34 @@
 from models.models import *
 
-def focal_loss(pre,gt,gamma,reduction='none'):
-    """
-    bce(pt) = -log(pt)
-    focalloss(pt) = -(1-p)**gamma * log(pt)
-    """
-    BCE = nn.BCEWithLogitsLoss(reduction='none')
-    eps = 1e-07
-    bceloss = BCE(pre+eps,gt)
-    #常规二分类交叉熵损失  ce(pt) = -log(pt)
-    # print('bceloss shape:{},bceloss:{}'.format(bceloss.shape,bceloss))
+class FocalLoss(nn.Module):
+    def __init__(self,gamma=1.5):
+        super().__init__()
+        self.gamma = gamma
 
-    BCE2 = nn.BCEWithLogitsLoss(reduction='mean')
-    # print('sum loss={}'.format(BCE2(pre,gt)))
+    def forward(self,pre,gt,reduction='none'):
+        """
+        bce(pt) = -log(pt)
+        focalloss(pt) = -(1-p)**gamma * log(pt)
+        """
+        BCE = nn.BCEWithLogitsLoss(reduction='none')
+        bceloss = BCE(pre,gt)
+        #常规二分类交叉熵损失  ce(pt) = -log(pt)
+        # print('bceloss shape:{},bceloss:{}'.format(bceloss.shape,bceloss))
 
-    pt = torch.exp(-bceloss)
-    weight = (1-pt)**gamma
+        BCE2 = nn.BCEWithLogitsLoss(reduction='mean')
+        # print('sum loss={}'.format(BCE2(pre,gt)))
 
-    focal_loss = weight * bceloss
+        pt = torch.exp(-bceloss)
+        weight = (1-pt)**self.gamma
 
-    if reduction == 'mean':
-        return focal_loss.mean()
-    elif reduction == 'sum':
-        return focal_loss.sum()
-    else:
-        return focal_loss    
+        focal_loss = weight * bceloss
+
+        if reduction == 'mean':
+            return focal_loss.mean()
+        elif reduction == 'sum':
+            return focal_loss.sum()
+        else:
+            return focal_loss    
 
 class YoloLoss(nn.Module):
     def __init__(self,model) :
@@ -41,8 +45,9 @@ class YoloLoss(nn.Module):
         lx, ly, lw, lh, lcls, lconf = FT([0]), FT([0]), FT([0]), FT([0]), FT([0]), FT([0])
         pt_conf,nt_conf = FT([0]),FT([0])
 
-        BCEconf1 = nn.BCEWithLogitsLoss(reduction='sum')
-        BCEconf2 = nn.BCEWithLogitsLoss(reduction='mean')
+        # BCEconf1 = nn.BCEWithLogitsLoss(reduction='sum')
+        # BCEconf2 = nn.BCEWithLogitsLoss(reduction='mean')
+        FocalLossConf = FocalLoss()
         BCEcls = nn.BCEWithLogitsLoss(reduction='mean')
         #比sigmoid + BCELoss更稳定一些. 所以对conf和cls,就不对yolo_out求sigmoid后再求BCELoss了
         MSELoss = nn.MSELoss(reduction='mean')
@@ -92,10 +97,10 @@ class YoloLoss(nn.Module):
             conf_pre = yolo_out[...,4]
             pos_conf_loss, neg_conf_loss= FT([0]), FT([0])
             if mask_obj.sum() > 0:
-                pos_conf_loss = BCEconf1(conf_pre[mask_obj],mask_obj[mask_obj].float())
-                print('BCELoss:pos_conf_loss:{}'.format(pos_conf_loss))
-                pos_conf_loss = focal_loss(conf_pre[mask_obj],mask_obj[mask_obj].float(),gamma=0.1,reduction='mean')
-                print('FocalLoss:pos_conf_loss:{}'.format(pos_conf_loss))
+                # pos_conf_loss = BCEconf1(conf_pre[mask_obj],mask_obj[mask_obj].float())
+                # print('BCELoss:pos_conf_loss:{}'.format(pos_conf_loss))
+                pos_conf_loss = FocalLossConf(conf_pre[mask_obj],mask_obj[mask_obj].float(),reduction='mean')
+                # print('FocalLoss:pos_conf_loss:{}'.format(pos_conf_loss))
                 lconf += pos_conf_loss
                 # print('conf_pre[mask_obj]:{}'.format(torch.sigmoid(conf_pre[mask_obj])))
                 # print('pos_conf_loss={}'.format(pos_conf_loss))
@@ -103,7 +108,7 @@ class YoloLoss(nn.Module):
                 pt_conf += pos_conf_loss
             if((~mask_obj).sum() > 0):
                 # neg_conf_loss = BCEconf2(conf_pre[~mask_obj],mask_obj[~mask_obj].float())
-                neg_conf_loss = focal_loss(conf_pre[~mask_obj],mask_obj[~mask_obj].float(),gamma=0.1,reduction='mean')
+                neg_conf_loss = FocalLossConf(conf_pre[~mask_obj],mask_obj[~mask_obj].float(),reduction='mean')
                 lconf += neg_weight * neg_conf_loss
                 # print('neg_conf_loss={}'.format(neg_conf_loss))
                 #不该预测出目标的位置要预测出无目标. conf趋向0.
