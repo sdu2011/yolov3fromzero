@@ -6,7 +6,7 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
     # testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
     start=datetime.datetime.now()
     print('test begin,testtxt:{}'.format(testtxt))
-    dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size)
+    dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size,aug=False)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=16,
                                             num_workers=1,
@@ -38,10 +38,12 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
             # print('yolo_out shape={}'.format(yolo_outs[0].shape))
             
             detections = post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_thre,cls_names)
-            metric(APs,detections,labels,img_size,iou_thre,cls_thre)
+            metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre)
     print('mAP={}'.format(np.mean(APs)))
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
+
+    return np.mean(APs)
 
 if __name__ == '__main__':
     import argparse

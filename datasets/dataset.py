@@ -170,10 +170,10 @@ def augment_image(img,label):
         A.HorizontalFlip(p=0.5),
         A.RandomBrightnessContrast(p=0.6),
         # A.RandomRotate90(),
-        A.Rotate(limit=25, p=0.2),  # 限制旋转角度为25度
-        A.GaussNoise(p=0.5),
-        A.GlassBlur(p=0.5),
-        A.RandomGamma(p=0.5),
+        # A.Rotate(limit=25, p=0.2),  # 限制旋转角度为25度
+        A.GaussNoise(p=0.2),
+        A.GlassBlur(p=0.2),
+        A.RandomGamma(p=0.2),
         # A.RandomRain(p=0.1),
         # A.RandomSunFlare(p=0.1),
         # A.CenterCrop(height=50,width=50) #从图像中间裁剪出h*w的区域
@@ -188,7 +188,7 @@ def augment_image(img,label):
         cls,x,y,w,h =label[i,0],label[i,1],label[i,2],label[i,3],label[i,4]
         bboxes[i] = [x,y,w,h]
         category_ids.append(cls)
-    print('bboxes:{}'.format(bboxes))
+    # print('bboxes:{}'.format(bboxes))
 
     random.seed()
     transformed = transform(image=img_rgb, bboxes=bboxes, category_ids=category_ids)
@@ -255,8 +255,8 @@ if __name__ == '__main__':
         img,label,path = data
         print(path)
         
-        if i > 10:
-            break
+        # if i > 10:
+        #     break
 
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))

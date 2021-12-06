@@ -74,7 +74,7 @@ def compute_ap(recall, precision):
     # Returns
         The average precision as computed in py-faster-rcnn.
     """
-
+    print('latest recall:{},latest precision:{}'.format(recall[-1],precision[-1]))
     # Append sentinel values to beginning and end
     mrec = np.concatenate(([0.], recall, [min(recall[-1] + 1E-3, 1.)]))
     mpre = np.concatenate(([0.], precision, [0.]))
@@ -224,12 +224,15 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
     output = torch.cat(yolo_outs,dim=1)
     bs = output.shape[0]
 
-    detections = [[]] * bs
+    # detections = [[]] * bs
+    #!!!!超级大坑  detections[x]的每一个元素的地址都是一样的 可以用id(detections[x])打印查看
+    
+    detections=[]
 
     for i in range(bs):
         origin_cv_img = cv2.imread(imgs_path[i])
         img_name = (imgs_path[i]).split('/')[-1]
-        print(img_name)
+        # print('post_process:{}'.format(imgs_path[i]))
         cur_path =  os.path.abspath(os.path.dirname(__file__))
         full_name = '{}/../out_imgs/{}'.format(cur_path,img_name)
         # print(full_name) 
@@ -257,12 +260,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
             boxes[...,3] = box_rb_y
 
             boxes = boxes.cpu().numpy()
-            print('predict boxes num={}'.format(boxes.shape[0]))
+            # print('predict boxes num={}'.format(boxes.shape[0]))
             keep = nms(boxes, iou_thre)
             
             final_boxes = boxes[keep]
-            print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
-            detections[i].append(final_boxes)
+            # print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
+            detections.append([final_boxes])
 
             cv_img = imgs[i,...].cpu().numpy()
             cv_img = cv_img.transpose(1,2,0)[...,::-1]
@@ -277,8 +280,9 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
 
                 pre_cls_prob = final_boxes[i,5:]
                 det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
-                # print('det_cls_idx:{}'.format(det_cls_idx))
+                
                 det_cls_name = [cls_names[idx] for idx in det_cls_idx]
+                # print('det_cls_idx:{},name:{}'.format(det_cls_idx,det_cls_name))
 
                 # plot_one_box(box, cv_img, color=(255,0,0), labels=det_cls_idx, line_thickness=None)
                 plot_one_box_on_origin_img(box, origin_cv_img,model_input_size=img_size, color=(255,0,0), labels=det_cls_name, line_thickness=None)
@@ -321,15 +325,16 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
     return inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
-def metric(APs,detections,labels,img_size,iou_thre,cls_thre):
+def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
     """
     统计一个batch内的AP,添加到APs.
     labels: [n,6] 6:img_idx,xywhc
-    iou_thre:默认0.5 与真实框iou超过该值则认为匹配成功
-    cls_thre:默认0.8 超过该值则认为类别判断正确
+    iou_thre: 与真实框iou超过该值则认为匹配成功
+    cls_thre: 超过该值则认为类别判断正确
     """
     bs = len(detections)
     for i in range(bs):  
+        # print('metric:img {}'.format(imgs_path[i]))
         correct = []
 
         mask = (labels[:,0] == i) 
@@ -349,7 +354,9 @@ def metric(APs,detections,labels,img_size,iou_thre,cls_thre):
         # print('角点:gt_boxes:{}'.format(gt_boxes_clone))
 
         detection = detections[i]
+        # print('{},{}'.format(i,detection))
         if len(detection) == 0:
+            print('no detection result')
             APs.append(0)
         else:
             detected_boxes = detection[0]

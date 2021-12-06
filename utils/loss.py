@@ -103,6 +103,7 @@ class YoloLoss(nn.Module):
                 # print('FocalLoss:pos_conf_loss:{}'.format(pos_conf_loss))
                 lconf += pos_conf_loss
                 # print('conf_pre[mask_obj]:{}'.format(torch.sigmoid(conf_pre[mask_obj])))
+                # print('conf_pre[mask_obj]:{}'.format(conf_pre[mask_obj]))
                 # print('pos_conf_loss={}'.format(pos_conf_loss))
                 #该预测出目标的位置要预测出目标 conf趋向1
                 pt_conf += pos_conf_loss
