@@ -1,3 +1,4 @@
+from albumentations.augmentations.crops.functional import bbox_center_crop
 from torch.utils.data import Dataset
 import os
 import cv2
@@ -5,7 +6,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=False):
+    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=True,mosaic=True):
         super().__init__()
         self.imgsize = imgsize
         try:
@@ -21,6 +22,7 @@ class  LoadImagesAndLabels(Dataset):
         self.debug = debug
         self.label_type=label_type
         self.aug=aug
+        self.mosaic = mosaic
 
     def __len__(self):
         return len(self.img_files)
@@ -78,6 +80,34 @@ class  LoadImagesAndLabels(Dataset):
         # print('after letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
         if new_img.shape[0] != 416 or new_img.shape[1] != 416:
             print('************************')
+
+
+        if self.mosaic:
+            # 选取四张图片
+            s = self.imgsize
+            # xc, yc = [int(random.uniform(s * 0.5, s * 1.5)) for _ in range(2)]  # mosaic center x, y
+            indices = [index] + [random.randint(0, len(self.label_files) - 1) for _ in range(3)] 
+            # print('选中的图片下标为:{}'.format(indices))
+            img4_label4 = []
+            for i, index in enumerate(indices):
+                # load image
+                img_path = self.img_files[index]
+                # print('__getitem__:{}'.format(img_path))
+                img = cv2.imread(img_path) 
+
+                # load label
+                label_path = self.label_files[index]
+                try:
+                    with open(label_path,'r') as f:
+                        lines = f.read().splitlines()
+                        label = [line.split() for line in lines]
+                        label = np.array(label,dtype=np.float32)
+                except:
+                    raise Exception('{} does not exist'.format(label_path))
+
+                img4_label4.append((img,label))    
+
+            new_img,new_label = mosaic(self.imgsize,img4_label4,aug=self.aug)
 
         if self.debug:
             debug_dataset(img_path,new_img,new_label)
@@ -161,6 +191,7 @@ import random
 def augment_image(img,label):
     """
     img,label:ndarray
+    albumentations用的是rgb顺序
     """
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     #albumentations用的是rgb顺序
@@ -199,6 +230,75 @@ def augment_image(img,label):
     # print(label)
     return transformed_image,transformed_bboxes,transformed_classes
 
+def mosaic(img_size,img4_label4,aug=False):
+    """
+    将多张图片拼接在一起.
+    img_size:拼接后的图像大小.
+    img1/2/3/4:待拼接的四张图
+    label1/2/3/4:yolo格式的标签. cxywh xywh代表比例.
+    """
+    new_img = np.zeros((img_size,img_size,3),dtype=np.uint8)
+    new_label = []
+    divid_point_x, divid_point_y = [int(random.uniform(img_size * 0.3,img_size * 0.7)) for _ in range(2)] 
+    #生成一个随机的分割点
+
+    for i in range(len(img4_label4)):
+        img,label = img4_label4[i][0],img4_label4[i][1]
+
+        if aug:
+            transformed_image,transformed_bboxes,transformed_classes = augment_image(img,label)
+            img = transformed_image[:,:,::-1] #rgb-->bgr
+            label[...,0] = np.array(transformed_classes)
+            label[...,1:] = np.array(transformed_bboxes) 
+
+            img4_label4[i] = (img,label)
+        
+        img,label = img4_label4[i][0],img4_label4[i][1]
+        img_h_o,img_w_o = img.shape[0],img.shape[1]
+        if i == 0:
+            #top-left
+            img_w,img_h = divid_point_x , divid_point_y
+            offset_x,offset_y = 0,0
+            #offset代表这个区域的左上角的点位于拼接图中的坐标
+        elif i == 1:
+            #top-right
+            img_w,img_h = img_size - divid_point_x , divid_point_y
+            offset_x,offset_y = divid_point_x,0
+        elif i == 2:
+            #bottom-left
+            img_w,img_h = divid_point_x , img_size - divid_point_y
+            offset_x,offset_y = 0,divid_point_y
+        elif i == 3:
+            #bottom-right
+            img_w,img_h = img_size - divid_point_x , img_size - divid_point_y
+            offset_x,offset_y = divid_point_x,divid_point_y
+        else:
+            pass
+        
+        img = cv2.resize(img, (img_w,img_h))
+        scale_x,scale_y = img_w/img_w_o,img_h/img_h_o
+        box_num = label.shape[0]
+        for j in range(box_num):
+            cls,x,y,w,h =label[j,0],label[j,1],label[j,2],label[j,3],label[j,4]
+
+            bbox_center_x = offset_x + img_w_o * x *scale_x
+            bbox_center_y = offset_y + img_h_o * y * scale_y
+            bbox_w = img_w_o * w *scale_x
+            bbox_h = img_h_o * h *scale_y                
+            #resize以后的Box的中心点和宽高
+
+            new_x = bbox_center_x/img_size
+            new_y = bbox_center_y/img_size       
+            new_w = bbox_w/img_size
+            new_h = bbox_h/img_size
+            #在拼接图中的比例
+
+            new_label.append([cls,new_x,new_y,new_w,new_h])
+
+        new_img[offset_y:offset_y+img_h,offset_x:offset_x+img_w,:] = img
+
+    return new_img,np.asarray(new_label)
+
 def debug_dataset(path,new_img,new_label):
     """
     debug处理后的图像和label是否正确
@@ -206,8 +306,8 @@ def debug_dataset(path,new_img,new_label):
     new_img:处理后的img  hwc bgr
     new_label:处理后的img上的label
     """
-    print(new_img.shape,new_label.shape)
-    print('new_label={}'.format(new_label))
+    # print(new_img.shape,new_label.shape)
+    # print('new_label={}'.format(new_label))
     name = path.split('/')[-1]
     full_name = './input_imgs/{}'.format(name)
     
@@ -230,7 +330,7 @@ def debug_dataset(path,new_img,new_label):
     for i in range(box_num):
         c1 = (int(lt_x[i]),int(lt_y[i]))
         c2 = (int(rd_x[i]),int(rd_y[i]))
-        print('c1:{},c2:{}'.format(c1,c2))
+        # print('c1:{},c2:{}'.format(c1,c2))
         cv2.rectangle(new_img, c1, c2, (255,0,0))
     
     cv2.imwrite(full_name,new_img)
@@ -243,7 +343,7 @@ if __name__ == '__main__':
     traintxt = 'coco/debug_train2017.txt'
     # traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=True)
+    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=False,mosaic=True)
     dataloader = torch.utils.data.DataLoader(dataset,
                                         batch_size=1,
                                         num_workers=1,
@@ -253,10 +353,10 @@ if __name__ == '__main__':
     start=datetime.datetime.now()
     for i,data in enumerate(dataloader):
         img,label,path = data
-        print(path)
+        # print(path)
         
-        # if i > 10:
-        #     break
+        if i > 10:
+            break
 
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))

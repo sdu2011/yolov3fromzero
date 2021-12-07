@@ -30,7 +30,7 @@ if __name__ == '__main__':
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
     traintxt = root_dir + '/' + opt.traintxt
-    dataset = LoadImagesAndLabels(traintxt,imgsize=opt.model_input_size,aug=True)
+    dataset = LoadImagesAndLabels(traintxt,imgsize=opt.model_input_size,aug=True,mosaic=True)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=opt.batchsize,
                                             num_workers=4,
@@ -51,12 +51,13 @@ if __name__ == '__main__':
         optimizer = torch.optim.Adam(yolov3net.parameters())
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch'] + 1
-        print('resume done*********************')  
+        print('resume done from {}*********************'.format(checkpoint_name))  
     
     yolov3net.train()
     loss = YoloLoss(yolov3net)
 
     mAP,best_mAP = 0.,0.
+    f_log = open('./train_log.txt','a+') 
     for epoch in range(start_epoch,100000): 
         print('epoch {}'.format(epoch))
         t0 = time.time()
@@ -87,13 +88,14 @@ if __name__ == '__main__':
         if epoch % 2 == 0:
             checkpoint_name = 'checkpoints/epoch{}.pt'.format(epoch)
             torch.save(checkpoint,checkpoint_name)
-            f_log = open('./train_log.txt','a+')  
-            now=datetime.datetime.now()
-            f_log.writelines('{},total_loss:{},pt_conf:{},nt_conf:{},lw={},lh={},lcls={}\n'. \
-                    format(str(now),total_loss.item(),pt_conf.item(),nt_conf.item(),lw.item(),lh.item(),lcls.item()))
-            f_log.flush()
-
         
+        #写日志
+        now=datetime.datetime.now()
+        f_log.writelines('{},total_loss:{},pt_conf:{},nt_conf:{},lw={},lh={},lcls={}\n'. \
+                format(str(now),total_loss.item(),pt_conf.item(),nt_conf.item(),lw.item(),lh.item(),lcls.item()))
+        f_log.flush()
+
+        #测试
         if epoch % 5 == 0:
             mAP = test.test(opt.cfg,opt.testtxt,checkpoint_name,opt.model_input_size,
                       opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
