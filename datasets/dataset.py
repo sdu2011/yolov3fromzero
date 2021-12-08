@@ -33,55 +33,6 @@ class  LoadImagesAndLabels(Dataset):
         """
         # print('__getitem__**********************')
 
-        # load image
-        img_path = self.img_files[index]
-        # print('__getitem__:{}'.format(img_path))
-        img = cv2.imread(img_path) 
-        
-        # load label
-        label_path = self.label_files[index]
-        try:
-            with open(label_path,'r') as f:
-                lines = f.read().splitlines()
-                label = [line.split() for line in lines]
-                label = np.array(label,dtype=np.float32)
-        except:
-            raise Exception('{} does not exist'.format(label_path))
-        
-        if self.label_type == 'coco':
-                h,w = img.shape[0],img.shape[1]
-
-                box_lt_x = label[...,1]
-                box_lt_y = label[...,2]
-                box_rd_x = label[...,3]
-                box_rd_y = label[...,4]
-
-                box_center_x = (box_lt_x + box_rd_x)/2
-                box_center_y = (box_lt_y + box_rd_y)/2
-                box_w = (box_rd_x - box_lt_x)
-                box_h = (box_rd_y - box_lt_y)
-
-                label[...,1] = box_center_x/w
-                label[...,2] = box_center_y/h
-                label[...,3] = box_w/w
-                label[...,4] = box_h/h
-
-                # print(label)
-
-        if self.aug:
-                transformed_image,transformed_bboxes,transformed_classes = augment_image(img,label)
-                img = transformed_image[:,:,::-1] #rgb-->bgr
-                label[...,0] = np.array(transformed_classes)
-                label[...,1:] = np.array(transformed_bboxes)
-                #对img的赋值不要放在augment_image里写. 注意python传参传引用的区别.
-
-        # print('before letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
-        new_img,new_label = letter_box(img,label,desired_size=416)
-        # print('after letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
-        if new_img.shape[0] != 416 or new_img.shape[1] != 416:
-            print('************************')
-
-
         if self.mosaic:
             # 选取四张图片
             s = self.imgsize
@@ -108,6 +59,54 @@ class  LoadImagesAndLabels(Dataset):
                 img4_label4.append((img,label))    
 
             new_img,new_label = mosaic(self.imgsize,img4_label4,aug=self.aug)
+        else:
+            # load image
+            img_path = self.img_files[index]
+            # print('__getitem__:{}'.format(img_path))
+            img = cv2.imread(img_path) 
+            
+            # load label
+            label_path = self.label_files[index]
+            try:
+                with open(label_path,'r') as f:
+                    lines = f.read().splitlines()
+                    label = [line.split() for line in lines]
+                    label = np.array(label,dtype=np.float32)
+            except:
+                raise Exception('{} does not exist'.format(label_path))
+            
+            if self.label_type == 'coco':
+                    h,w = img.shape[0],img.shape[1]
+
+                    box_lt_x = label[...,1]
+                    box_lt_y = label[...,2]
+                    box_rd_x = label[...,3]
+                    box_rd_y = label[...,4]
+
+                    box_center_x = (box_lt_x + box_rd_x)/2
+                    box_center_y = (box_lt_y + box_rd_y)/2
+                    box_w = (box_rd_x - box_lt_x)
+                    box_h = (box_rd_y - box_lt_y)
+
+                    label[...,1] = box_center_x/w
+                    label[...,2] = box_center_y/h
+                    label[...,3] = box_w/w
+                    label[...,4] = box_h/h
+
+                    # print(label)
+
+            if self.aug:
+                    transformed_image,transformed_bboxes,transformed_classes = augment_image(img,label)
+                    img = transformed_image[:,:,::-1] #rgb-->bgr
+                    label[...,0] = np.array(transformed_classes)
+                    label[...,1:] = np.array(transformed_bboxes)
+                    #对img的赋值不要放在augment_image里写. 注意python传参传引用的区别.
+
+            # print('before letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
+            new_img,new_label = letter_box(img,label,desired_size=(self.imgsize,self.imgsize))
+            # print('after letter_box,img shape:{},img_path:{}'.format(img.shape,img_path))
+            if new_img.shape[0] != 416 or new_img.shape[1] != 416:
+                print('************************')
 
         if self.debug:
             debug_dataset(img_path,new_img,new_label)
@@ -139,13 +138,23 @@ class  LoadImagesAndLabels(Dataset):
         imgs,labels = torch.stack(img,0),torch.cat(new_label,0)
         return imgs,labels,img_path
 
-def letter_box(img,label,desired_size=416,color=[114,114,114]):
+def letter_box(img,label,desired_size=(416,416),color=[114,114,114]):
+    """
+    把img resize到特定尺寸. 保持宽高比.
+    desired_size : (h,w)
+
+    return:尺寸为desired_size的img. label为目标在新的Img中的比例.
+    """
     # print('img shape:{},label shape:{}'.format(img.shape,label.shape))
 
-    old_size = img.shape[:2] # old_size is in (height, width) format
-
-    ratio = float(desired_size)/max(old_size)
-    new_size = tuple([round(x*ratio) for x in old_size])
+    origin_h,origin_w = img.shape[:2] # old_size is in (height, width) format
+    desired_h,desired_w = desired_size[0],desired_size[1]
+    # ratio = float(desired_size)/max(old_size)
+    ratio_h = float(desired_h)/origin_h
+    ratio_w = float(desired_w)/origin_w
+    ratio = min(ratio_h,ratio_w)
+    # print('ratio={},desired_h:{},desired_w:{}'.format(ratio,desired_h,desired_w))
+    new_size = tuple([round(x*ratio) for x in (origin_h,origin_w)])
     
     interp = cv2.INTER_AREA if ratio < 1 else cv2.INTER_LINEAR
     #https://blog.csdn.net/guyuealian/article/details/85097633 如何选择插值的方式
@@ -154,7 +163,7 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
 
     # new_size should be in (width, height) format
     # im = cv2.resize(img, (new_size[1], new_size[0]))
-    # print('old_size:{} new_size:{}'.format(old_size,new_size))
+    # print('old_size:{} new_size:{}'.format((origin_h,origin_w),new_size))
     # print('img shape:{}'.format(img.shape))
 
     h,w = img.shape[:2]
@@ -165,8 +174,8 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
     # print(box_x.shape,box_y.shape,box_w.shape,box_h.shape)
     # 这里是绝对尺度.不是比例
 
-    delta_w = max(0,desired_size - new_size[1])
-    delta_h = max(0,desired_size - new_size[0])
+    delta_w = max(0,desired_size[1] - new_size[1])
+    delta_h = max(0,desired_size[0] - new_size[0])
     top, bottom = delta_h//2, delta_h-(delta_h//2)
     left, right = delta_w//2, delta_w-(delta_w//2)
     # print('top:{},bottom:{},left:{},right:{}'.format(top,bottom,left,right))
@@ -174,7 +183,7 @@ def letter_box(img,label,desired_size=416,color=[114,114,114]):
         value=color)
     # print('new_img shape:{}'.format(new_img.shape))
     new_img_h,new_img_w = new_img.shape[:2]
-    if new_img_h != desired_size:
+    if new_img_h != desired_size[0]:
         print('img:{},top:{},bottom:{},left:{},right:{}'.format(img.shape,top,bottom,left,right))
     new_label = label    
     # c x y w h
@@ -254,7 +263,6 @@ def mosaic(img_size,img4_label4,aug=False):
             img4_label4[i] = (img,label)
         
         img,label = img4_label4[i][0],img4_label4[i][1]
-        img_h_o,img_w_o = img.shape[0],img.shape[1]
         if i == 0:
             #top-left
             img_w,img_h = divid_point_x , divid_point_y
@@ -275,17 +283,18 @@ def mosaic(img_size,img4_label4,aug=False):
         else:
             pass
         
-        img = cv2.resize(img, (img_w,img_h))
-        scale_x,scale_y = img_w/img_w_o,img_h/img_h_o
+        # img = cv2.resize(img, (img_w,img_h))
+        img,label = letter_box(img,label,desired_size=(img_h,img_w),color=[114,114,114])
+        img_h_o,img_w_o = img.shape[0],img.shape[1]
         box_num = label.shape[0]
         for j in range(box_num):
             cls,x,y,w,h =label[j,0],label[j,1],label[j,2],label[j,3],label[j,4]
-
-            bbox_center_x = offset_x + img_w_o * x *scale_x
-            bbox_center_y = offset_y + img_h_o * y * scale_y
-            bbox_w = img_w_o * w *scale_x
-            bbox_h = img_h_o * h *scale_y                
-            #resize以后的Box的中心点和宽高
+            
+            bbox_center_x = offset_x + img_w * x 
+            bbox_center_y = offset_y + img_h * y
+            bbox_w = img_w_o * w 
+            bbox_h = img_h_o * h                 
+            #box在整个拼接图中的中心点和宽高
 
             new_x = bbox_center_x/img_size
             new_y = bbox_center_y/img_size       
@@ -294,6 +303,24 @@ def mosaic(img_size,img4_label4,aug=False):
             #在拼接图中的比例
 
             new_label.append([cls,new_x,new_y,new_w,new_h])
+        # scale_x,scale_y = img_w/img_w_o,img_h/img_h_o
+        # box_num = label.shape[0]
+        # for j in range(box_num):
+        #     cls,x,y,w,h =label[j,0],label[j,1],label[j,2],label[j,3],label[j,4]
+
+        #     bbox_center_x = offset_x + img_w_o * x *scale_x
+        #     bbox_center_y = offset_y + img_h_o * y * scale_y
+        #     bbox_w = img_w_o * w *scale_x
+        #     bbox_h = img_h_o * h *scale_y                
+        #     #resize以后的Box的中心点和宽高
+
+        #     new_x = bbox_center_x/img_size
+        #     new_y = bbox_center_y/img_size       
+        #     new_w = bbox_w/img_size
+        #     new_h = bbox_h/img_size
+        #     #在拼接图中的比例
+
+        #     new_label.append([cls,new_x,new_y,new_w,new_h])
 
         new_img[offset_y:offset_y+img_h,offset_x:offset_x+img_w,:] = img
 
@@ -347,7 +374,7 @@ if __name__ == '__main__':
     dataloader = torch.utils.data.DataLoader(dataset,
                                         batch_size=1,
                                         num_workers=1,
-                                        shuffle=True,
+                                        shuffle=False,
                                         collate_fn=dataset.collate_fn
                                         )
     start=datetime.datetime.now()

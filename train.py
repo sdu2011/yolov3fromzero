@@ -57,7 +57,10 @@ if __name__ == '__main__':
     loss = YoloLoss(yolov3net)
 
     mAP,best_mAP = 0.,0.
-    f_log = open('./train_log.txt','a+') 
+    now=datetime.datetime.now()
+    log_name = './train_log_{}.txt'.format(now)
+    f_log = open(log_name,'a+') 
+    f_log.writelines('begin training********************')
     for epoch in range(start_epoch,100000): 
         print('epoch {}'.format(epoch))
         t0 = time.time()
@@ -85,18 +88,18 @@ if __name__ == '__main__':
         checkpoint = {'epoch':epoch,
                       'model':yolov3net.state_dict(),
                       'optimizer':optimizer.state_dict()}
-        if epoch % 2 == 0:
+        if epoch % 1 == 0:
             checkpoint_name = 'checkpoints/epoch{}.pt'.format(epoch)
             torch.save(checkpoint,checkpoint_name)
         
         #写日志
         now=datetime.datetime.now()
-        f_log.writelines('{},total_loss:{},pt_conf:{},nt_conf:{},lw={},lh={},lcls={}\n'. \
-                format(str(now),total_loss.item(),pt_conf.item(),nt_conf.item(),lw.item(),lh.item(),lcls.item()))
+        f_log.writelines('{},epoch:{},total_loss:{},pt_conf:{},nt_conf:{},lw={},lh={},lcls={}\n'. \
+                format(str(now),epoch,total_loss.item(),pt_conf.item(),nt_conf.item(),lw.item(),lh.item(),lcls.item()))
         f_log.flush()
 
         #测试
-        if epoch % 5 == 0:
+        if epoch % 2 == 0:
             mAP = test.test(opt.cfg,opt.testtxt,checkpoint_name,opt.model_input_size,
                       opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
 
