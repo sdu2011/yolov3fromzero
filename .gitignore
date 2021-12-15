@@ -137,8 +137,11 @@ coco/labels/*
 coco/*.coco
 coco/5k.txt
 coco/README.txt
+coco/debug*
+checkpoints/*
 cfg/test.txt
 cfg/*.bak
 *.npy
 *.cache
 .vscode/*
+train_log*
