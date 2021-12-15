@@ -17,10 +17,14 @@ parser.add_argument('-model_input_size', type=int,default=416, help='model_input
 parser.add_argument('-conf_thre', type=float,default=0.7, help='confidence threshold')
 parser.add_argument('-iou_thre', type=float,default=0.5, help='iou threshold')
 parser.add_argument('-cls_thre', type=float,default=0.7, help='class threshold')
-parser.add_argument('-conf_loss_weights', type=int,default=2, help='conf loss weights')
-parser.add_argument('-negconf_loss_weights', type=int,default=2, help='neg conf loss weights')
-parser.add_argument('-cls_loss_weights', type=int,default=5, help='cls loss weights')
 parser.add_argument('-cls_names_path', type=str,default='coco/names', help='class names file')
+parser.add_argument('-conf_loss_weights', type=int,default=200, help='conf loss weights')
+parser.add_argument('-negconf_loss_weights', type=int,default=5, help='neg conf loss weights')
+parser.add_argument('-cls_loss_weights', type=int,default=50, help='cls loss weights')
+parser.add_argument('-xy_loss_weights', type=int,default=5, help='xy loss weights')
+parser.add_argument('-wh_loss_weights', type=int,default=1, help='wh loss weights')
+parser.add_argument('-use_mosaic', type=bool,default=False, help='use mosaic data augmentation')
+
 opt = parser.parse_args()
 print(opt)
 cls_names = load_classes(opt.cls_names_path)
@@ -30,7 +34,7 @@ if __name__ == '__main__':
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
     traintxt = root_dir + '/' + opt.traintxt
-    dataset = LoadImagesAndLabels(traintxt,imgsize=opt.model_input_size,aug=True,mosaic=True)
+    dataset = LoadImagesAndLabels(traintxt,imgsize=opt.model_input_size,aug=True,mosaic=opt.use_mosaic)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=opt.batchsize,
                                             num_workers=4,
@@ -60,10 +64,16 @@ if __name__ == '__main__':
     now=datetime.datetime.now()
     log_name = './train_log_{}.txt'.format(now)
     f_log = open(log_name,'a+') 
-    f_log.writelines('begin training********************')
+    f_log.writelines('begin training********************\n')
     for epoch in range(start_epoch,100000): 
         print('epoch {}'.format(epoch))
+        for param_group in optimizer.param_groups:
+            print('当前学习率:{}'.format(param_group['lr']))
         t0 = time.time()
+        total_loss_list = []
+        pt_conf_list,nt_conf_list,lx_list,ly_list,lw_list,lh_list,lcls_list= [],[],[],[],[],[],[]
+
+        mean_total_loss,mean_lconf_loss = 0.,0.
         for i,data in enumerate(dataloader):
             imgs,labels,_ = data
             imgs = imgs.to(device)
@@ -73,16 +83,45 @@ if __name__ == '__main__':
             yolo_out = yolov3net(imgs)
             # print([out.shape for out in yolo_out])
 
-            lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf = loss.compute_loss(yolo_out,labels,neg_weight=5)
-            total_loss = opt.conf_loss_weights * lconf + 2 * lx + 2 * ly + 0.1 * lw + 0.1 * lh + opt.cls_loss_weights * lcls
+            lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf = loss.compute_loss(yolo_out,labels,neg_weight=opt.negconf_loss_weights)
+            total_loss = opt.conf_loss_weights * lconf + opt.xy_loss_weights * (lx + ly) + opt.wh_loss_weights * (lw + lh) + opt.cls_loss_weights * lcls
             # print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf.item(),lx.item(),ly.item(),lw.item(),lh.item(),lcls.item()))
-            print('img:{},total_loss={},lconf:{},pt_conf:{},nt_conf:{}'.format(
-                (1+i)*opt.batchsize,total_loss.item(),lconf.item(),pt_conf.item(),nt_conf.item()))
+            # print('img:{},total_loss={},lconf:{},pt_conf:{},nt_conf:{},lx={},ly={},lcls={}'.format(
+            #     (1+i)*opt.batchsize,total_loss.item(),lconf.item(),pt_conf.item(),nt_conf.item(),lx.item(),ly.item(),lcls.item()))
             optimizer.zero_grad() #清空梯度
             total_loss.backward() #反向传播
             optimizer.step()      #更新参数
-        
-        t1 = time.time()
+
+            total_loss_list.append(total_loss.item())
+            pt_conf_list.append(pt_conf.item())
+            nt_conf_list.append(nt_conf.item())
+            lx_list.append(lx.item())
+            ly_list.append(ly.item())
+            lcls_list.append(lcls.item())
+            lw_list.append(lw.item())
+            lh_list.append(lh.item())
+
+            mean_total_loss = np.mean(np.array(total_loss_list))
+            mean_pt_conf_loss = np.mean(np.array(pt_conf_list))
+            mean_nt_conf_loss = np.mean(np.array(nt_conf_list))
+            mean_lx_loss = np.mean(np.array(lx_list))
+            mean_ly_loss = np.mean(np.array(ly_list))
+            mean_lcls_loss = np.mean(np.array(lcls_list))
+            mean_lw_loss = np.mean(np.array(lw_list))
+            mean_lh_loss = np.mean(np.array(lh_list))
+            print('*****img:{},total loss:{},pt_conf:{},nt_conf:{},lx:{},ly:{},lcs:{},lw:{},lh:{}'.format((1+i)*opt.batchsize,\
+                                                    mean_total_loss,\
+                                                    mean_pt_conf_loss,\
+                                                    mean_nt_conf_loss,\
+                                                    mean_lx_loss,\
+                                                    mean_ly_loss,\
+                                                    mean_lcls_loss,\
+                                                    mean_lw_loss,\
+                                                    mean_lh_loss        
+                                                    )
+            )
+
+        t1 = time.time()        
         print('epoch{} train for {}'.format(epoch,(t1-t0)))
 
         checkpoint = {'epoch':epoch,
@@ -94,8 +133,11 @@ if __name__ == '__main__':
         
         #写日志
         now=datetime.datetime.now()
-        f_log.writelines('{},epoch:{},total_loss:{},pt_conf:{},nt_conf:{},lw={},lh={},lcls={}\n'. \
-                format(str(now),epoch,total_loss.item(),pt_conf.item(),nt_conf.item(),lw.item(),lh.item(),lcls.item()))
+        # f_log.writelines('{},epoch:{},total_loss:{},pt_conf:{},nt_conf:{},lx={},ly={},lw={},lh={},lcls={}\n'. \
+        #         format(str(now),epoch,total_loss.item(),pt_conf.item(),nt_conf.item(),lx.item(),ly.item(),lw.item(),lh.item(),lcls.item()))
+        f_log.writelines('{},epoch:{},total_loss:{},pt_conf:{},nt_conf:{},lx:{},ly:{},lcls:{},lw:{},lh:{}\n'.\
+            format(str(now),epoch,mean_total_loss,mean_pt_conf_loss,
+            mean_nt_conf_loss,mean_lx_loss,mean_ly_loss,mean_lcls_loss,mean_lw_loss,mean_lh_loss))
         f_log.flush()
 
         #测试

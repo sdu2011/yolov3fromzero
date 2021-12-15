@@ -35,12 +35,14 @@ class YoloLoss(nn.Module):
         super(YoloLoss, self).__init__()
         self.model = model
 
-    def compute_loss(self,yolo_outs,targets,neg_weight=3):
+    def compute_loss(self,yolo_outs,targets,neg_weight):
         """
         yolo_outs:list of Tensor [[batch,3,13,13,85],[batch,3,26,26,85],[batch,3,52,52,85]] 85:xywh+conf+class
         targets:[gt_box_num,6] image,cls,xywh
         neg_weight:neg_conf_loss与pos_conf_loss的比例
         """
+        debug = 0
+
         FT = torch.cuda.FloatTensor if yolo_outs[0].is_cuda else torch.FloatTensor
         lx, ly, lw, lh, lcls, lconf = FT([0]), FT([0]), FT([0]), FT([0]), FT([0]), FT([0])
         pt_conf,nt_conf = FT([0]),FT([0])
@@ -51,7 +53,6 @@ class YoloLoss(nn.Module):
         BCEcls = nn.BCEWithLogitsLoss(reduction='mean')
         #比sigmoid + BCELoss更稳定一些. 所以对conf和cls,就不对yolo_out求sigmoid后再求BCELoss了
         MSELoss = nn.MSELoss(reduction='mean')
-
 
         mask,gt_xywhc = self.match_gtbox_to_yololayer(targets,yolo_outs)
         #mask [gt_box_num,N] N:i(layer idx),a(anchor idx),grid_x,grid_y
@@ -102,17 +103,27 @@ class YoloLoss(nn.Module):
                 pos_conf_loss = FocalLossConf(conf_pre[mask_obj],mask_obj[mask_obj].float(),reduction='mean')
                 # print('FocalLoss:pos_conf_loss:{}'.format(pos_conf_loss))
                 lconf += pos_conf_loss
-                # print('conf_pre[mask_obj]:{}'.format(torch.sigmoid(conf_pre[mask_obj])))
                 # print('conf_pre[mask_obj]:{}'.format(conf_pre[mask_obj]))
                 # print('pos_conf_loss={}'.format(pos_conf_loss))
+
+                if debug:
+                    correct = (torch.sigmoid(conf_pre[mask_obj]) > 0.7).sum()
+                    print('应当预测出目标的数量:{},实际预测出目标的数量:{},比例:{}'.format(mask_obj.sum(),correct,correct/mask_obj.sum()))
+
                 #该预测出目标的位置要预测出目标 conf趋向1
                 pt_conf += pos_conf_loss
             if((~mask_obj).sum() > 0):
                 # neg_conf_loss = BCEconf2(conf_pre[~mask_obj],mask_obj[~mask_obj].float())
                 neg_conf_loss = FocalLossConf(conf_pre[~mask_obj],mask_obj[~mask_obj].float(),reduction='mean')
                 lconf += neg_weight * neg_conf_loss
-                # print('neg_conf_loss={}'.format(neg_conf_loss))
                 #不该预测出目标的位置要预测出无目标. conf趋向0.
+                
+                if debug:
+                    no_obj_sum = (~mask_obj).sum()
+                    correct = (torch.sigmoid(conf_pre[~mask_obj]) < 0.7).sum()
+                    print('应当预测出没目标的数量:{},实际预测出没目标的数量:{},比例:{}'.format(no_obj_sum,correct,correct/no_obj_sum))
+
+                
                 nt_conf += neg_conf_loss
             # print('pos_conf_loss:{},neg_conf_loss:{}'.format(pos_conf_loss,neg_conf_loss))
 
@@ -128,6 +139,9 @@ class YoloLoss(nn.Module):
                 pre_x = pre_box[...,0]
                 lx += MSELoss(pre_x[mask_obj], gt_x[mask_obj])
                 
+                if debug:
+                    pass
+
                 pre_y = pre_box[...,1]
                 ly += MSELoss(pre_y[mask_obj], gt_y[mask_obj])
                 

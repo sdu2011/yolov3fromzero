@@ -232,7 +232,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
     for i in range(bs):
         origin_cv_img = cv2.imread(imgs_path[i])
         img_name = (imgs_path[i]).split('/')[-1]
-        # print('post_process:{}'.format(imgs_path[i]))
+        print('post_process:{}'.format(imgs_path[i]))
         cur_path =  os.path.abspath(os.path.dirname(__file__))
         full_name = '{}/../out_imgs/{}'.format(cur_path,img_name)
         # print(full_name) 
@@ -281,6 +281,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
                 pre_cls_prob = final_boxes[i,5:]
                 det_cls_idx = np.where(pre_cls_prob > cls_prob)[0].tolist()
                 
+                if len(det_cls_idx) == 0:
+                    pre_cls_prob = pre_cls_prob.tolist()
+                    det_cls_idx = [pre_cls_prob.index(max(pre_cls_prob))]
+                #如果没有满足的cls_prob,则取prob最大的作为类别.
+
+
                 det_cls_name = [cls_names[idx] for idx in det_cls_idx]
                 # print('det_cls_idx:{},name:{}'.format(det_cls_idx,det_cls_name))
 
@@ -325,7 +331,7 @@ def bbox_iou(box1, box2, x1y1x2y2=True):
 
     return inter_area / (b1_area + b2_area - inter_area + 1e-16)
 
-def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
+def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
     """
     统计一个batch内的AP,添加到APs.
     labels: [n,6] 6:img_idx,xywhc
@@ -334,7 +340,7 @@ def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
     """
     bs = len(detections)
     for i in range(bs):  
-        # print('metric:img {}'.format(imgs_path[i]))
+        print('metric:img {}'.format(imgs_path[i]))
         correct = []
 
         mask = (labels[:,0] == i) 
@@ -354,17 +360,15 @@ def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
         # print('角点:gt_boxes:{}'.format(gt_boxes_clone))
 
         detection = detections[i]
-        # print('{},{}'.format(i,detection))
         if len(detection) == 0:
             print('no detection result')
             APs.append(0)
         else:
             detected_boxes = detection[0]
+            # xywh+conf+c
             idx = np.argsort(detected_boxes[...,4])[::-1]
-            #按照conf降序排列
             detected_boxes = detected_boxes[idx]
-            # print('detected_boxes shape:{}'.format(detected_boxes.shape))
-
+            #对检测框按照conf降序排列
             """
             挨个处理每一个预测框b,计算gt boxes和b的iou,取iou最大的gtbox_i,认为b是gtbox_i对应的预测框.
             """
@@ -384,14 +388,21 @@ def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
                 
                 # print('真值:gt_boxes :{}'.format(gt_boxes))
                 gt_box_cls = int(label[best_gt_i,1])
-                det_cls = det_box[:,5:]
+                pre_cls_prob = det_box[0,5:]
+                #注意det_box[0,5:]与det_box[:,5:]的不同　会造成shape不同
                 # print('预测概率为:{}，真实类别为:{}'.format(det_cls,gt_box_cls))
-                det_cls_idx = torch.where(det_cls > cls_thre)[1]
-                # print('预测类别为:{}'.format(det_cls_idx.tolist()))
-                cls_correct = gt_box_cls in det_cls_idx.tolist() 
-                # print('类别预测正确:{},真值:{},预测值:{}'.format(cls_correct,gt_box_cls,det_cls_idx.tolist()))
+                det_cls_idx = np.where(pre_cls_prob > cls_thre)[0].tolist()
+                # print('cls_thre:{},预测类别为:{}'.format(cls_thre,det_cls_idx))
+                if len(det_cls_idx) == 0:
+                    pre_cls_prob = pre_cls_prob.numpy().tolist()
+                    det_cls_idx = [pre_cls_prob.index(max(pre_cls_prob))]
+                    # print('cls_thre:{},预测类别为:{}'.format(cls_thre,det_cls_idx))
+
+                cls_correct = gt_box_cls in det_cls_idx
+                # print('类别预测正确:{},真值:{},预测值:{}'.format(cls_correct,gt_box_cls,det_cls_idx))
                 # print('iou匹配成功:{}'.format(iou_satisfied))
                 
+
                 if iou_satisfied and cls_correct:
                     correct.append(1)
                 else:
@@ -413,6 +424,8 @@ def metric(APs,imgs_path,detections,labels,img_size,iou_thre,cls_thre):
 
             AP = compute_ap(recall,precision)
             APs.append(AP)
+            Recalls.append(recall[-1])
+            Precisions.append(precision[-1])
 
             # print('img{} in this batch,recall:{},precision:{},AP:{}'.format(i,recall[-1],precision[-1],AP))
     

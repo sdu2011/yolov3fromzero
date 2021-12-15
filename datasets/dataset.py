@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=True,mosaic=True):
+    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=True,mosaic=False):
         super().__init__()
         self.imgsize = imgsize
         try:
@@ -343,6 +343,7 @@ def debug_dataset(path,new_img,new_label):
     y = new_label[:,2]
     w = new_label[:,3]
     h = new_label[:,4]
+    cls = new_label[:,0]
 
     # print(x,y,w,h)
 
@@ -354,23 +355,34 @@ def debug_dataset(path,new_img,new_label):
     # print('lt_x:{},lt_y:{},rd_x:{},rd_y:{}'.format(lt_x,lt_y,rd_x,rd_y))
 
     box_num = new_label.shape[0]
+    tl = round(0.002 * (new_img.shape[0] + new_img.shape[1]) / 2) + 1  # line/font thickness
     for i in range(box_num):
         c1 = (int(lt_x[i]),int(lt_y[i]))
         c2 = (int(rd_x[i]),int(rd_y[i]))
         # print('c1:{},c2:{}'.format(c1,c2))
+        tf = max(tl - 1, 1)  # font thickness
         cv2.rectangle(new_img, c1, c2, (255,0,0))
-    
-    cv2.imwrite(full_name,new_img)
+        cls_id=int(cls[i])
+        cls_name = cls_names[cls_id]
+        cv2.putText(new_img, cls_name, (c1[0], c1[1] - 2), 0, tl / 8, [225, 0, 0], thickness=tf, lineType=cv2.LINE_AA)
+    cv2.imwrite(full_name,new_img)                                    
     print('save {}'.format(full_name))
 
 import datetime
 if __name__ == '__main__':
+    from utils.utils import *
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-cls_names_path', type=str,default='coco/names', help='class names file')
+    opt = parser.parse_args()
+    cls_names = load_classes(opt.cls_names_path)
+
     # traintxt = '/home/autocore/work/yolov3_darknet/data/lishui/train.txt'
     root_dir=os.getcwd()
-    traintxt = 'coco/debug_train2017.txt'
+    traintxt = 'coco/val2017.txt'
     # traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=False,mosaic=True)
+    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=False,mosaic=False)
     dataloader = torch.utils.data.DataLoader(dataset,
                                         batch_size=1,
                                         num_workers=1,
@@ -382,8 +394,8 @@ if __name__ == '__main__':
         img,label,path = data
         # print(path)
         
-        if i > 10:
-            break
+        # if i > 10:
+        #     break
 
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
