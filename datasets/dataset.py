@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=True,mosaic=False):
+    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=False,mosaic=False):
         super().__init__()
         self.imgsize = imgsize
         try:

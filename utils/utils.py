@@ -235,7 +235,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
         print('post_process:{}'.format(imgs_path[i]))
         cur_path =  os.path.abspath(os.path.dirname(__file__))
         full_name = '{}/../out_imgs/{}'.format(cur_path,img_name)
-        # print(full_name) 
+        print(full_name) 
 
         pre_conf = output[i,...,4]
         mask =  pre_conf > conf_thre
@@ -267,11 +267,12 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
             # print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
             detections.append([final_boxes])
 
+            print(imgs.shape)
             cv_img = imgs[i,...].cpu().numpy()
             cv_img = cv_img.transpose(1,2,0)[...,::-1]
             cv_img = np.ascontiguousarray(cv_img)
             cv_img = (cv_img * 255).astype('uint8')
-            ##chw rgb --> hwc bgr
+            #chw rgb --> hwc bgr
             
             final_box_num = final_boxes.shape[0]
             for i in range(final_box_num):
@@ -404,6 +405,7 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
                 
 
                 if iou_satisfied and cls_correct:
+                # if iou_satisfied:
                     correct.append(1)
                 else:
                     # print('iou_matched:{}'.format(iou_matched))

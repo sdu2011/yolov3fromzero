@@ -23,7 +23,8 @@ parser.add_argument('-negconf_loss_weights', type=int,default=5, help='neg conf 
 parser.add_argument('-cls_loss_weights', type=int,default=50, help='cls loss weights')
 parser.add_argument('-xy_loss_weights', type=int,default=5, help='xy loss weights')
 parser.add_argument('-wh_loss_weights', type=int,default=1, help='wh loss weights')
-parser.add_argument('-use_mosaic', type=bool,default=False, help='use mosaic data augmentation')
+parser.add_argument('-use_mosaic', action='store_true',help='use mosaic data augmentation')
+#cmd line加-use_mosaic则将use_mosaic设置为true,否则设置为false
 
 opt = parser.parse_args()
 print(opt)
@@ -153,7 +154,7 @@ if __name__ == '__main__':
             f_log.flush()
 
         # if lconf.item() < 0.01 or total_loss.item() < 0.1 or mAP > 0.4:
-        if mAP > 0.4:
+        if mAP > 0.6:
             break
     f_log.close()
 

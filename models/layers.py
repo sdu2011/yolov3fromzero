@@ -28,7 +28,7 @@ class FeatureShortcut(nn.Module):
         return x + y
 
 class YoloLayer(nn.Module):
-    def __init__(self, input_img_size,anchors,cls_num,stride,yolo_index=1,device='cuda:0'):
+    def __init__(self, input_img_size,anchors,cls_num,stride,yolo_index=1):
         """
         img_size:(h,w)
         """
@@ -41,7 +41,7 @@ class YoloLayer(nn.Module):
 
         self.anchor_scale = self.anchors/self.stride
         #配置文件中的anchor是相对于原图的,这里做了下采样.
-        self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2).to(device)
+        self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2)
         #shape匹配yolo层的输出(bs, anchors, grid, grid, xywh+conf+cls)
 
         self.ny,self.nx = input_img_size[0]//stride,input_img_size[1]//stride
@@ -80,11 +80,11 @@ class YoloLayer(nn.Module):
 
             return model_out
             
-    def __make_grid(self,nx=13,ny=13,device='cuda:0'):
+    def __make_grid(self,nx=13,ny=13):
         yv, xv = torch.meshgrid([torch.arange(ny), torch.arange(nx)])
         grid = torch.stack((xv,yv),2)
         
-        grid = grid.view((1,1,ny,nx,2)).to(device)
+        grid = grid.view((1,1,ny,nx,2))
 
         return grid
 
@@ -94,6 +94,10 @@ class YoloLayer(nn.Module):
 
         return:在当前feature map上的x,y,w,h
         """
+        if model_out.is_cuda and not self.grid.is_cuda:
+            self.grid = self.grid.cuda()
+            self.anchor_wh = self.anchor_wh.cuda()
+
         model_out[...,0:2] = torch.sigmoid(model_out[...,0:2]) + self.grid
         # print('mode_out={}'.format(model_out[...,:2]))
         model_out[...,2:4] = torch.exp(model_out[...,2:4]) * self.anchor_wh
