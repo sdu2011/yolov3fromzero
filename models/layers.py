@@ -44,8 +44,11 @@ class YoloLayer(nn.Module):
         self.anchor_wh = self.anchor_scale.view(1,len(anchors),1,1,2)
         #shape匹配yolo层的输出(bs, anchors, grid, grid, xywh+conf+cls)
 
+        # self.ny,self.nx = -1,-1
         self.ny,self.nx = input_img_size[0]//stride,input_img_size[1]//stride
         self.grid = self.__make_grid(self.nx,self.ny)
+        # print('nx={}'.format(self.nx))
+
 
         # print('layer{},anchors:{},nx:{},anchor_scale:{}'.\
         #     format(yolo_index,self.anchors,nx,self.anchor_scale))
@@ -88,12 +91,22 @@ class YoloLayer(nn.Module):
 
         return grid
 
+    def set_gridxy(self,gridx,gridy):
+        self.nx,self.ny = gridx,gridy
+
     def decode(self,model_out):
         """
         model_out: [batch,3,ny,nx,xywh+conf+cls]
 
         return:在当前feature map上的x,y,w,h
         """
+        _,_,ny,nx,_ = model_out.shape
+        if (self.nx,self.ny) != (nx,ny):
+            print('nx={},ny={}'.format(nx,ny))
+            self.grid = self.__make_grid(nx,ny)
+            #make_grid只做一次.
+        #解决multi-scale训练的问题. grid的大小不能在初始化时完成.
+
         if model_out.is_cuda and not self.grid.is_cuda:
             self.grid = self.grid.cuda()
             self.anchor_wh = self.anchor_wh.cuda()

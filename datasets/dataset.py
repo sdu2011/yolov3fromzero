@@ -6,7 +6,7 @@ import numpy as np
 import torch
 
 class  LoadImagesAndLabels(Dataset):
-    def __init__(self,traintxt,imgsize=416,debug=False,label_type='yolo',aug=False,mosaic=False):
+    def __init__(self,traintxt,cls_names,imgsize=416,debug=False,label_type='yolo',aug=False,mosaic=False):
         super().__init__()
         self.imgsize = imgsize
         try:
@@ -16,6 +16,7 @@ class  LoadImagesAndLabels(Dataset):
         except:
             raise Exception('{} does not exist'.format(traintxt))
         
+        self.cls_names = cls_names
         self.img_files = lines
         self.label_files = [x.replace('images', 'labels').replace(os.path.splitext(x)[-1], '.txt') for x in self.img_files] 
         # print(self.label_files)
@@ -109,7 +110,7 @@ class  LoadImagesAndLabels(Dataset):
                 print('************************')
 
         if self.debug:
-            debug_dataset(img_path,new_img,new_label)
+            debug_dataset(img_path,new_img,new_label,self.cls_names)
 
         new_img = new_img[:,:,::-1] #bgr->rgb
         new_img = new_img.transpose( 2, 0, 1)  #hwc-chw
@@ -206,17 +207,17 @@ def augment_image(img,label):
     #albumentations用的是rgb顺序
     
     transform = A.Compose([
-        # A.RandomCrop(),
-        A.HorizontalFlip(p=0.5),
+        # A.ShiftScaleRotate(p=0.5),
+        A.HorizontalFlip(p=0.2),
         A.RandomBrightnessContrast(p=0.6),
-        # A.RandomRotate90(),
-        # A.Rotate(limit=25, p=0.2),  # 限制旋转角度为25度
+        # # A.RandomRotate90(),
+        # A.Rotate(limit=25, p=1),  # 限制旋转角度为25度
         A.GaussNoise(p=0.2),
         A.GlassBlur(p=0.2),
         A.RandomGamma(p=0.2),
-        # A.RandomRain(p=0.1),
-        # A.RandomSunFlare(p=0.1),
-        # A.CenterCrop(height=50,width=50) #从图像中间裁剪出h*w的区域
+        A.RandomRain(p=0.1),
+        # # A.RandomSunFlare(p=0.1),
+        # # A.CenterCrop(height=50,width=50) #从图像中间裁剪出h*w的区域
         ], bbox_params=A.BboxParams(format='yolo', label_fields=['category_ids']))
     
     box_num = label.shape[0]
@@ -326,7 +327,7 @@ def mosaic(img_size,img4_label4,aug=False):
 
     return new_img,np.asarray(new_label)
 
-def debug_dataset(path,new_img,new_label):
+def debug_dataset(path,new_img,new_label,cls_names):
     """
     debug处理后的图像和label是否正确
     path:原始图像路径
@@ -382,10 +383,10 @@ if __name__ == '__main__':
     traintxt = 'coco/val2017.txt'
     # traintxt = 'coco/train2017.txt'
     traintxt = root_dir + '/' + traintxt
-    dataset = LoadImagesAndLabels(traintxt,debug=True,label_type='yolo',aug=False,mosaic=False)
+    dataset = LoadImagesAndLabels(traintxt,cls_names,debug=True,label_type='yolo',aug=True,mosaic=False)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                        batch_size=1,
-                                        num_workers=1,
+                                        batch_size=8,
+                                        num_workers=8,
                                         shuffle=False,
                                         collate_fn=dataset.collate_fn
                                         )
@@ -394,8 +395,8 @@ if __name__ == '__main__':
         img,label,path = data
         # print(path)
         
-        # if i > 10:
-        #     break
+        if i > 10:
+            break
 
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))

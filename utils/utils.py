@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import torch
 import os
+from pathlib import Path
 
 def ap_per_class(tp, conf, pred_cls, target_cls):
     """ Compute the average precision, given the recall and precision curves.
@@ -74,7 +75,7 @@ def compute_ap(recall, precision):
     # Returns
         The average precision as computed in py-faster-rcnn.
     """
-    print('latest recall:{},latest precision:{}'.format(recall[-1],precision[-1]))
+    # print('latest recall:{},latest precision:{}'.format(recall[-1],precision[-1]))
     # Append sentinel values to beginning and end
     mrec = np.concatenate(([0.], recall, [min(recall[-1] + 1E-3, 1.)]))
     mpre = np.concatenate(([0.], precision, [0.]))
@@ -222,6 +223,9 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
     return [[boxes of img1],[boxes of img2],....] 
     """
     output = torch.cat(yolo_outs,dim=1)
+
+    print(output[0,1,:4])
+
     bs = output.shape[0]
 
     # detections = [[]] * bs
@@ -232,18 +236,20 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
     for i in range(bs):
         origin_cv_img = cv2.imread(imgs_path[i])
         img_name = (imgs_path[i]).split('/')[-1]
-        print('post_process:{}'.format(imgs_path[i]))
+        # print('post_process:{}'.format(imgs_path[i]))
         cur_path =  os.path.abspath(os.path.dirname(__file__))
         full_name = '{}/../out_imgs/{}'.format(cur_path,img_name)
-        print(full_name) 
+        # print(full_name) 
 
         pre_conf = output[i,...,4]
+        
         mask =  pre_conf > conf_thre
         # print('msak={}'.format(mask.shape))
         boxes = output[i][mask]
         # print('boxes:{}'.format(boxes))
 
         box_num = boxes.shape[0]
+        # print('box_num={}'.format(box_num))
         if box_num > 0:
             # print('box_num={}'.format(box_num))
             box_center_x = boxes[...,0]
@@ -267,7 +273,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
             # print('after nms final_boxes num={}'.format(final_boxes.shape[0]))
             detections.append([final_boxes])
 
-            print(imgs.shape)
+            # print(imgs.shape)
             cv_img = imgs[i,...].cpu().numpy()
             cv_img = cv_img.transpose(1,2,0)[...,::-1]
             cv_img = np.ascontiguousarray(cv_img)
@@ -340,6 +346,7 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
     cls_thre: 超过该值则认为类别判断正确
     """
     bs = len(detections)
+    # print('bs={}'.format(bs))
     for i in range(bs):  
         print('metric:img {}'.format(imgs_path[i]))
         correct = []
@@ -373,6 +380,9 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
             """
             挨个处理每一个预测框b,计算gt boxes和b的iou,取iou最大的gtbox_i,认为b是gtbox_i对应的预测框.
             """
+
+            matched_gt_box_idx=[]
+            #已经匹配了的gt box就不可以继续匹配了
             for det_box in detected_boxes:
                 det_box = torch.from_numpy(det_box).float()
                 det_box = det_box.view(1,-1)
@@ -383,6 +393,8 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
                 # print('ious :{}'.format(ious))
 
                 best_gt_i = np.argmax(ious)
+                
+
                 iou_matched = ious[best_gt_i]
                 # print('匹配iou为:{}'.format(iou_matched))
                 iou_satisfied = iou_matched > iou_thre
@@ -404,9 +416,10 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
                 # print('iou匹配成功:{}'.format(iou_satisfied))
                 
 
-                if iou_satisfied and cls_correct:
-                # if iou_satisfied:
+                if iou_satisfied and cls_correct and (best_gt_i not in matched_gt_box_idx):
+                # if cls_correct:
                     correct.append(1)
+                    matched_gt_box_idx.append(best_gt_i)
                 else:
                     # print('iou_matched:{}'.format(iou_matched))
                     # print('det_cls_idx:{}'.format(det_cls_idx))
@@ -429,11 +442,117 @@ def metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,
             Recalls.append(recall[-1])
             Precisions.append(precision[-1])
 
+            print('latest recall:{},latest precision:{}'.format(recall[-1],precision[-1]))
+            if recall[-1] < 0.6 or precision[-1]< 0.6:
+                # print('latest recall:{},latest precision:{}'.format(recall[-1],precision[-1]))
+                print('low recall/precision img {}'.format(imgs_path[i]))
             # print('img{} in this batch,recall:{},precision:{},AP:{}'.format(i,recall[-1],precision[-1],AP))
     
     # print('************mAP={}*****************'.format(np.mean(APs)))
 
     return 
+
+def load_darknet_weights(yolov3net, weights, cutoff=-1):
+    # Parses and loads the weights stored in 'weights'
+
+    # Establish cutoffs (load layers between 0 and cutoff. if cutoff = -1 all are loaded)
+    file = Path(weights).name
+    if file == 'darknet53.conv.74':
+        cutoff = 75
+    elif file == 'yolov3-tiny.conv.15':
+        cutoff = 15
+
+    # Read weights file
+    with open(weights, 'rb') as f:
+        # Read Header https://github.com/AlexeyAB/darknet/issues/2914#issuecomment-496675346
+        version = np.fromfile(f, dtype=np.int32, count=3)  # (int32) version info: major, minor, revision
+        seen = np.fromfile(f, dtype=np.int64, count=1)  # (int64) number of images seen during training
+
+        weights = np.fromfile(f, dtype=np.float32)  # the rest are weights
+
+    ptr = 0
+    for i, (mdef, module) in enumerate(zip(yolov3net.module_defs[1:cutoff], yolov3net.module_list[:cutoff])):
+        # print(mdef)
+        if mdef['type'] == 'convolutional':
+            # print(module)
+            conv = module[0]
+            if mdef['batch_normalize']:
+                # Load BN bias, weights, running mean and running variance
+                bn = module[1]
+                nb = bn.bias.numel()  # number of biases
+                # Bias
+                bn.bias.data.copy_(torch.from_numpy(weights[ptr:ptr + nb]).view_as(bn.bias))
+                ptr += nb
+                # Weight
+                bn.weight.data.copy_(torch.from_numpy(weights[ptr:ptr + nb]).view_as(bn.weight))
+                ptr += nb
+                # Running Mean
+                bn.running_mean.data.copy_(torch.from_numpy(weights[ptr:ptr + nb]).view_as(bn.running_mean))
+                ptr += nb
+                # Running Var
+                bn.running_var.data.copy_(torch.from_numpy(weights[ptr:ptr + nb]).view_as(bn.running_var))
+                ptr += nb
+            else:
+                # Load conv. bias
+                nb = conv.bias.numel()
+                conv_b = torch.from_numpy(weights[ptr:ptr + nb]).view_as(conv.bias)
+                conv.bias.data.copy_(conv_b)
+                ptr += nb
+            # Load conv. weights
+            nw = conv.weight.numel()  # number of weights
+            conv.weight.data.copy_(torch.from_numpy(weights[ptr:ptr + nw]).view_as(conv.weight))
+            ptr += nw
+
+def load_weights(yolov3_net, weights_path):
+    """Parses and loads the weights stored in 'weights_path'"""
+
+    # Open the weights file
+    fp = open(weights_path, "rb")
+    header = np.fromfile(fp, dtype=np.int32, count=5)  # First five are header values
+
+    # Needed to write header when saving weights
+    header_info = header
+
+    seen = header[3]
+    weights = np.fromfile(fp, dtype=np.float32)  # The rest are weights
+    fp.close()
+
+    ptr = 0
+    for i, (module_def, module) in enumerate(zip(yolov3_net.module_defs[1:], yolov3_net.module_list)):
+        print(module_def)
+        if module_def['type'] == 'convolutional':
+            conv_layer = module[0]
+            if module_def['batch_normalize'] == 1:
+                # Load BN bias, weights, running mean and running variance
+                bn_layer = module[1]
+                num_b = bn_layer.bias.numel()  # Number of biases
+                # Bias
+                bn_b = torch.from_numpy(weights[ptr:ptr + num_b]).view_as(bn_layer.bias)
+                bn_layer.bias.data.copy_(bn_b)
+                ptr += num_b
+                # Weight
+                bn_w = torch.from_numpy(weights[ptr:ptr + num_b]).view_as(bn_layer.weight)
+                bn_layer.weight.data.copy_(bn_w)
+                ptr += num_b
+                # Running Mean
+                bn_rm = torch.from_numpy(weights[ptr:ptr + num_b]).view_as(bn_layer.running_mean)
+                bn_layer.running_mean.data.copy_(bn_rm)
+                ptr += num_b
+                # Running Var
+                bn_rv = torch.from_numpy(weights[ptr:ptr + num_b]).view_as(bn_layer.running_var)
+                bn_layer.running_var.data.copy_(bn_rv)
+                ptr += num_b
+            else:
+                # Load conv. bias
+                num_b = conv_layer.bias.numel()
+                conv_b = torch.from_numpy(weights[ptr:ptr + num_b]).view_as(conv_layer.bias)
+                conv_layer.bias.data.copy_(conv_b)
+                ptr += num_b
+            # Load conv. weights
+            num_w = conv_layer.weight.numel()
+            conv_w = torch.from_numpy(weights[ptr:ptr + num_w]).view_as(conv_layer.weight)
+            conv_layer.weight.data.copy_(conv_w)
+            ptr += num_w
 
 def load_classes(path):
     # Loads *.names file at 'path'

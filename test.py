@@ -2,41 +2,49 @@ from models.models import *
 from datasets.dataset import *
 from utils.utils import *
 
-def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre,cls_names):
+
+def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre,cls_names,bs=32):
     # testtxt = '/home/autocore/work/yolov3fromzero/cfg/test.txt'
     start=datetime.datetime.now()
     print('test begin,testtxt:{}'.format(testtxt))
-    dataset = LoadImagesAndLabels(testtxt,imgsize=model_input_size,aug=False)
+    
+    dataset = LoadImagesAndLabels(testtxt,cls_names,imgsize=model_input_size,aug=False,debug=False)
     dataloader = torch.utils.data.DataLoader(dataset,
-                                            batch_size=64,
-                                            num_workers=10,
+                                            batch_size=bs,
+                                            num_workers=8,
                                             shuffle=False,
                                             collate_fn=dataset.collate_fn)
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
     yolov3net = Yolov3(cfg)
-    yolov3net = yolov3net.to(device)
-    #
-    checkpoint = torch.load(checkpoint_name)
-    yolov3net.load_state_dict(checkpoint['model'])
+
+    if checkpoint_name.endswith('.weights'):
+        load_darknet_weights(yolov3net, checkpoint_name)
+        # pass
+    elif checkpoint_name.endswith('.pt'):
+        checkpoint = torch.load(checkpoint_name)
+        yolov3net.load_state_dict(checkpoint['model'])
+    print('****************model weights load done********************')
     #加载模型
 
-    # yolov3net.eval()
-    yolov3net.eval()
+    yolov3net.to(device).eval()
     APs,Recalls,Precisions=[],[],[]
-    for data in dataloader:
+    for i,data in enumerate(dataloader):
         imgs,labels,imgs_path = data
         imgs = imgs.to(device)
         imgs = imgs.float()/255.
 
+        print('image{}'.format(i * bs))
         # print('imgs_path:{},labels:{}'.format(imgs_path,labels))
 
         img_size = imgs.shape[2]
 
         with torch.no_grad():
             yolo_outs = yolov3net(imgs)
-            # print('yolo_out shape={}'.format(yolo_outs[0].shape))
+            print('yolo_out shape={}'.format(yolo_outs[0].shape))
             
+            #output[j,j,:]:1.53957062138943e-05
+
             detections = post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_thre,cls_names)
             metric(APs,Recalls,Precisions,imgs_path,detections,labels,img_size,iou_thre,cls_thre)
     print('mAP={}'.format(np.mean(APs)))
@@ -62,9 +70,10 @@ if __name__ == '__main__':
     print(opt.model_path)
 
     cls_names = load_classes(opt.cls_names_path)
-    test(opt.cfg,opt.testtxt,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
+    
+    test(opt.cfg,opt.testtxt,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names,bs=64)
 
-
+    torch.cuda.empty_cache()
 
 
 

@@ -47,6 +47,9 @@ class YoloLoss(nn.Module):
         lx, ly, lw, lh, lcls, lconf = FT([0]), FT([0]), FT([0]), FT([0]), FT([0]), FT([0])
         pt_conf,nt_conf = FT([0]),FT([0])
 
+        total_box_num,total_nobox_num,correct_posconf,correct_negconf,correct_x,correct_y = \
+            FT([0]), FT([0]), FT([0]), FT([0]), FT([0]), FT([0])
+
         # BCEconf1 = nn.BCEWithLogitsLoss(reduction='sum')
         # BCEconf2 = nn.BCEWithLogitsLoss(reduction='mean')
         FocalLossConf = FocalLoss()
@@ -92,6 +95,10 @@ class YoloLoss(nn.Module):
                     # print('gt_c :{}'.format(gt_c.shape))
                     # print('mask sum:{}'.format(mask__.sum()))
 
+            total_box_num += mask_obj.sum()
+            total_nobox_num += (~mask_obj).sum()
+            #记录应该预测出的box总数.
+
             """
             conf loss
             """
@@ -106,8 +113,9 @@ class YoloLoss(nn.Module):
                 # print('conf_pre[mask_obj]:{}'.format(conf_pre[mask_obj]))
                 # print('pos_conf_loss={}'.format(pos_conf_loss))
 
+                correct = (torch.sigmoid(conf_pre[mask_obj]) > 0.7).sum()
+                correct_posconf += correct
                 if debug:
-                    correct = (torch.sigmoid(conf_pre[mask_obj]) > 0.7).sum()
                     print('应当预测出目标的数量:{},实际预测出目标的数量:{},比例:{}'.format(mask_obj.sum(),correct,correct/mask_obj.sum()))
 
                 #该预测出目标的位置要预测出目标 conf趋向1
@@ -118,12 +126,13 @@ class YoloLoss(nn.Module):
                 lconf += neg_weight * neg_conf_loss
                 #不该预测出目标的位置要预测出无目标. conf趋向0.
                 
+                correct = (torch.sigmoid(conf_pre[~mask_obj]) < 0.5).sum()
+                correct_negconf += correct
+
                 if debug:
-                    no_obj_sum = (~mask_obj).sum()
-                    correct = (torch.sigmoid(conf_pre[~mask_obj]) < 0.7).sum()
+                    no_obj_sum = (~mask_obj).sum()   
                     print('应当预测出没目标的数量:{},实际预测出没目标的数量:{},比例:{}'.format(no_obj_sum,correct,correct/no_obj_sum))
 
-                
                 nt_conf += neg_conf_loss
             # print('pos_conf_loss:{},neg_conf_loss:{}'.format(pos_conf_loss,neg_conf_loss))
 
@@ -139,15 +148,26 @@ class YoloLoss(nn.Module):
                 pre_x = pre_box[...,0]
                 lx += MSELoss(pre_x[mask_obj], gt_x[mask_obj])
                 
+                diff = abs(pre_x[mask_obj] - gt_x[mask_obj])
+                correct = (diff < 0.1).sum()
+                correct_x += correct
                 if debug:
-                    pass
+                    print('pre_x={}'.format(pre_x[mask_obj]))
+                    print('gt_x={}'.format(gt_x[mask_obj]))
 
                 pre_y = pre_box[...,1]
                 ly += MSELoss(pre_y[mask_obj], gt_y[mask_obj])
-                
+                diff = abs(pre_y[mask_obj] - gt_y[mask_obj])
+                correct = (diff < 0.1).sum()
+                correct_y += correct
+
                 pre_w = pre_box[...,2]
                 lw += MSELoss(pre_w[mask_obj], gt_w[mask_obj])
-                
+                if debug:
+                    print('pre_w={}'.format(pre_w[mask_obj]))
+                    print('gt_w={}'.format(gt_w[mask_obj]))
+
+
                 pre_h = pre_box[...,3]
                 lh += MSELoss(pre_h[mask_obj], gt_h[mask_obj])
 
@@ -171,7 +191,9 @@ class YoloLoss(nn.Module):
                 # print('correct_num={},mask_obj num={}'.format(correct_num,mask_obj.sum()))
 
         # print('lconf={},lx={},ly={},lw={},lh={},lcls={}'.format(lconf,lx,ly,lw,lh,lcls))
-        return lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf
+        statics = (total_box_num.item(),total_nobox_num.item(),correct_posconf.item(),\
+            correct_negconf.item(),correct_x.item(),correct_y.item())
+        return lconf,lx,ly,lw,lh,lcls,pt_conf,nt_conf,statics
 
     def match_gtbox_to_yololayer(self,targets,yolo_outs,threshold=0.5):
         """
