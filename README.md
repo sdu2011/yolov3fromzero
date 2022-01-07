@@ -62,5 +62,16 @@ label的格式默认为yolo的格式. cxywh xywh为比例.
 ## 训练
 python train.py
 
+指定gpu训练:
+在id=1的卡上训练:
+```
+export CUDA_VISIBLE_DEVICES=1
+python train.py
+```
 
+在id=0,1的两张卡上训练
+```
+export CUDA_VISIBLE_DEVICES=0,1
+python train.py
+```
 

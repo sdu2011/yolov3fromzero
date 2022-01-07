@@ -11,7 +11,7 @@ import math
 parser = argparse.ArgumentParser()
 parser.add_argument('-resume', default=False, help='resume training flag')
 parser.add_argument('-epochs', type=int, default=0, help='resume from number of epochs,only useful when resume is True')
-parser.add_argument('-batchsize', type=int,default=48, help='training batch size')
+parser.add_argument('-batchsize', type=int,default=96, help='training batch size')
 parser.add_argument('-cfg', type=str,default='cfg/yolov3.cfg', help='training cfg')
 parser.add_argument('-traintxt', type=str,default='coco/trainval2017.txt', help='training txt')
 parser.add_argument('-testtxt', type=str,default='coco/val2017.txt', help='testing txt')
@@ -30,6 +30,7 @@ parser.add_argument('-use_multi_scale', action='store_true',help='scale when tra
 #cmd line加-use_mosaic则将use_mosaic设置为true,否则设置为false
 parser.add_argument('-optimizer',type=str,default='Adam',help='optimizer type:Adam/Sgd')
 parser.add_argument('-max_epochs',type=int,default='400',help='max epochs for training')
+parser.add_argument('-gpus',type=str,default='0',help='gpu ids')
 
 opt = parser.parse_args()
 print(opt)
@@ -43,7 +44,7 @@ if __name__ == '__main__':
     dataset = LoadImagesAndLabels(traintxt,cls_names,imgsize=opt.model_input_size,aug=True,mosaic=opt.use_mosaic)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=opt.batchsize,
-                                            num_workers=8,
+                                            num_workers=os.cpu_count(),
                                             shuffle=True,
                                             collate_fn=dataset.collate_fn)
     cuda = torch.cuda.is_available()
@@ -53,6 +54,12 @@ if __name__ == '__main__':
         torch.backends.cudnn.benchmark = True
     device = torch.device('cuda:0' if cuda else 'cpu')
     yolov3net = Yolov3(opt.cfg)
+
+    # os.environ['CUDA_VISIBLE_DEVICES'] = opt.gpus
+    #设置多gpu训练. 这一句必须放在import torch前才有效
+
+    yolov3net = nn.DataParallel(yolov3net)
+
     yolov3net = yolov3net.to(device)
     if opt.optimizer == 'Adam':
         optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, yolov3net.parameters()), lr=1e-4, weight_decay=5e-4)
@@ -68,7 +75,9 @@ if __name__ == '__main__':
         optimizer.load_state_dict(checkpoint['optimizer'])
         start_epoch = checkpoint['epoch'] + 1
         print('resume done from {}*********************'.format(checkpoint_name))  
-    
+
+        del checkpoint
+
     yolov3net.train()
     loss = YoloLoss(yolov3net)
 

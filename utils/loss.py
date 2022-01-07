@@ -34,6 +34,9 @@ class YoloLoss(nn.Module):
     def __init__(self,model) :
         super(YoloLoss, self).__init__()
         self.model = model
+        
+        self.multi_gpu = type(self.model) in (nn.parallel.DataParallel, nn.parallel.DistributedDataParallel)
+        #判断是否用DataParallel包装了model,即是否使用了多gpu训练
 
     def compute_loss(self,yolo_outs,targets,neg_weight):
         """
@@ -140,8 +143,13 @@ class YoloLoss(nn.Module):
             box loss
             """
             if mask_obj.sum() > 0:
-                yolo_layer_index = self.model.yolo_layers_index[i]
-                yolo_layer = self.model.module_list[yolo_layer_index]
+                if not self.multi_gpu:
+                    yolo_layer_index = self.model.yolo_layers_index[i]
+                    yolo_layer = self.model.module_list[yolo_layer_index]
+                else:
+                    yolo_layer_index = self.model.module.yolo_layers_index[i]
+                    yolo_layer = self.model.module.module_list[yolo_layer_index]
+                
                 pre_box = torch.clone(yolo_out)
                 yolo_layer.decode(pre_box)
                 
@@ -209,10 +217,17 @@ class YoloLoss(nn.Module):
 
         all_ious = []
         grid_xys = []
+
         for i,pre in enumerate(yolo_outs):
-            yolo_layer_index = self.model.yolo_layers_index[i]
-            yolo_layer = self.model.module_list[yolo_layer_index]
+            if not self.multi_gpu:
+                yolo_layer_index = self.model.yolo_layers_index[i]
+                yolo_layer = self.model.module_list[yolo_layer_index]
+            else:
+                yolo_layer_index = self.model.module.yolo_layers_index[i]
+                yolo_layer = self.model.module.module_list[yolo_layer_index]
+
             anchor_boxes = yolo_layer.anchor_scale
+
 
             bs,anchor_num,grid_y,grid_x,_ = pre.shape
             gt_boxes = targets.clone()
@@ -246,7 +261,11 @@ class YoloLoss(nn.Module):
             mask[i,2] = grid_xys[layer_idx][i,0]
             mask[i,3] = grid_xys[layer_idx][i,1]
 
-            grid_x,grid_y = self.model.get_grid_num(layer_idx)
+            if not self.multi_gpu:
+                grid_x,grid_y = self.model.get_grid_num(layer_idx)
+            else:
+                grid_x,grid_y = self.model.module.get_grid_num(layer_idx)
+
             # print('grid_x={},grid_y={}'.format(grid_x,grid_y))
             gt_xywhc[i,0] = targets[i,2] * grid_x
             gt_xywhc[i,1] = targets[i,3] * grid_y

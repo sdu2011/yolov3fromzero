@@ -11,12 +11,13 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
     dataset = LoadImagesAndLabels(testtxt,cls_names,imgsize=model_input_size,aug=False,debug=False)
     dataloader = torch.utils.data.DataLoader(dataset,
                                             batch_size=bs,
-                                            num_workers=8,
+                                            num_workers=os.cpu_count(),
                                             shuffle=False,
                                             collate_fn=dataset.collate_fn)
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
     yolov3net = Yolov3(cfg)
+    yolov3net = nn.DataParallel(yolov3net)
 
     if checkpoint_name.endswith('.weights'):
         load_darknet_weights(yolov3net, checkpoint_name)
