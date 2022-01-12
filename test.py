@@ -17,16 +17,20 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
     yolov3net = Yolov3(cfg)
+    
     yolov3net = nn.DataParallel(yolov3net)
-
     if checkpoint_name.endswith('.weights'):
         load_darknet_weights(yolov3net, checkpoint_name)
         # pass
     elif checkpoint_name.endswith('.pt'):
         checkpoint = torch.load(checkpoint_name)
         yolov3net.load_state_dict(checkpoint['model'])
+
+        del checkpoint
     print('****************model weights load done********************')
     #加载模型
+
+    # yolov3net = nn.DataParallel(yolov3net)
 
     yolov3net.to(device).eval()
     APs,Recalls,Precisions=[],[],[]
@@ -37,6 +41,7 @@ def test(cfg,testtxt,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thr
 
         print('image{}'.format(i * bs))
         # print('imgs_path:{},labels:{}'.format(imgs_path,labels))
+        # print(imgs)
 
         img_size = imgs.shape[2]
 
