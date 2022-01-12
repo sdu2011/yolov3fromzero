@@ -62,8 +62,8 @@ class YoloLayer(nn.Module):
         """
         # print('x shape={}'.format(x.shape))
         batch,_,ny,nx = x.shape
-        x = x.view(batch,self.anchors_num,(5+self.cls_num),ny,nx).permute(0,1,4,3,2).contiguous()
-        #[batch,3x(5+cls),n,n] --> [batch,anchors,grid,grid,5+cls]
+        x = x.view(batch,self.anchors_num,(5+self.cls_num),ny,nx).permute(0,1,3,4,2).contiguous()
+        #[batch,3x(5+cls),n,n] --> [batch,anchors,gridy,gridx,5+cls]
         if self.training:
             return x
         else:
@@ -111,8 +111,10 @@ class YoloLayer(nn.Module):
             self.grid = self.grid.cuda()
             self.anchor_wh = self.anchor_wh.cuda()
 
+        # x=torch.sigmoid(model_out[...,0])
+        # print('x={}'.format(x))
+
         model_out[...,0:2] = torch.sigmoid(model_out[...,0:2]) + self.grid
-        # print('mode_out={}'.format(model_out[...,:2]))
         model_out[...,2:4] = torch.exp(model_out[...,2:4]) * self.anchor_wh
         model_out[...,4:] = torch.sigmoid(model_out[..., 4:])
 
