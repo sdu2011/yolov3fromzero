@@ -10,7 +10,7 @@ import math
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-resume', default=False, help='resume training flag')
-parser.add_argument('-epochs', type=int, default=0, help='resume from number of epochs,only useful when resume is True')
+parser.add_argument('-resume_checkpoint', type=str, help='resume from this checkpoint')
 parser.add_argument('-batchsize', type=int,default=96, help='training batch size')
 parser.add_argument('-cfg', type=str,default='cfg/yolov3.cfg', help='training cfg')
 parser.add_argument('-traintxt', type=str,default='coco/trainval2017.txt', help='training txt')
@@ -29,7 +29,7 @@ parser.add_argument('-use_mosaic', action='store_true',help='use mosaic data aug
 parser.add_argument('-use_multi_scale', action='store_true',help='scale when training')
 #cmd line加-use_mosaic则将use_mosaic设置为true,否则设置为false
 parser.add_argument('-optimizer',type=str,default='Adam',help='optimizer type:Adam/Sgd')
-parser.add_argument('-max_epochs',type=int,default='400',help='max epochs for training')
+parser.add_argument('-max_epochs',type=int,default='300',help='max epochs for training')
 parser.add_argument('-gpus',type=str,default='0',help='gpu ids')
 
 opt = parser.parse_args()
@@ -68,7 +68,8 @@ if __name__ == '__main__':
     start_epoch = 0
     resume = opt.resume
     if resume:
-        checkpoint_name = 'checkpoints/epoch{}.pt'.format(opt.epochs)
+        # checkpoint_name = 'checkpoints/epoch{}.pt'.format(opt.epochs)
+        checkpoint_name = opt.resume_checkpoint
         checkpoint = torch.load(checkpoint_name)
         yolov3net.load_state_dict(checkpoint['model'])
         optimizer = torch.optim.Adam(yolov3net.parameters())

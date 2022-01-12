@@ -302,6 +302,7 @@ def post_process(imgs,imgs_path,yolo_outs,img_size,conf_thre,iou_thre,cls_prob,c
 
             # cv2.imwrite(full_name,cv_img)
             cv2.imwrite(full_name,origin_cv_img)
+            print('save result to:{}'.format(full_name))
             
     
     return detections

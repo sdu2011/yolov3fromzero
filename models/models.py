@@ -5,7 +5,7 @@ from layers import *
 darknet = False
 if darknet:
     def create_modules(module_defs):
-        print('create model as origin darknet param!')
+        print('models.py:create model as origin darknet param!!')
         input_channels = [3]
         
         module_list = nn.ModuleList() 
@@ -104,6 +104,7 @@ if darknet:
         return module_list
 else:    
     def create_modules(module_defs):
+        print('create model !')
         input_channels = [3]
         
         module_list = nn.ModuleList() 
@@ -234,36 +235,19 @@ class Yolov3(nn.Module):
         # 记录每一层的输出.供route和shortcut使用.
         for i,module in enumerate(self.module_list):
             name = module.__class__.__name__
+            # print('module name is {}'.format(name))
             if name  == 'FeatureConcat':
                 layers = module.layers
-                # print('route from_layers={}'.format(layers))
                 features_need_concat = [out_every_layer[layer] for layer in layers]
                 x = module(features_need_concat)
-                # print('FeatureConcat:x output shape={}'.format(x.shape))
             elif name == 'FeatureShortcut':
                 from_layers = module.from_layers[0]
                 x = module(x,out_every_layer[from_layers])
-                # print('FeatureShortcut:x output shape={}'.format(x.shape))
             elif name == 'YoloLayer':
-                b,c,h,w=0,1,2,3
-                # print('yolo input:x[{},{},{},{}]:{}'.format(b,c,h,w,x[b,c,w,h]))
                 out = module(x)
                 yolo_out.append(out)
-                #[batch,3,ny,nx,xywh+conf+cls]
-                # box_idx=266, 267, 279, 280
-                # print('yolo output:x[{},{},{},{}]:{}'.format(b,c,h,w,out[0,267,:4]))
             else:
-                # print('conv:x input shape={}'.format(x.shape))
-                b,c,h,w=0,2,4,5
-                # print('conv input:x[{},{},{},{}]:{}'.format(b,c,h,w,x[b,c,h,w]))
                 x = module(x)
-                # print(module[0].weight.shape)
-                # print(module[0].weight[31,1,1,1])
-                #weight是正确的.可能是bn不对
-                # print(module[1].weight.shape)
-                # print(module[1].weight[4])
-                # print('conv output:x[{},{},{},{}]:{}'.format(b,c,h,w,x[b,c,h,w]))
-                # print('conv:x output shape={}'.format(x.shape))
 
             out_every_layer.append(x)
 

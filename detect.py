@@ -1,4 +1,4 @@
-from torch._C import device
+# from torch._C import device
 from models.models import *
 from datasets.dataset import *
 from utils.utils import *
@@ -36,6 +36,9 @@ def letter_box(img,desired_size,color=[114,114,114]):
     return new_img
 
 def resize_square(img, height=416, color=(0, 0, 0)):  # resize a rectangular image to a padded square
+    """
+    功能和letter_box一样.
+    """
     shape = img.shape[:2]  # shape = [height, width]
     ratio = float(height) / max(shape)
     new_shape = [round(shape[0] * ratio), round(shape[1] * ratio)]
@@ -46,13 +49,12 @@ def resize_square(img, height=416, color=(0, 0, 0)):  # resize a rectangular ima
     img = cv2.resize(img, (new_shape[1], new_shape[0]), interpolation=cv2.INTER_AREA)
     return cv2.copyMakeBorder(img, top, bottom, left, right, cv2.BORDER_CONSTANT, value=color), ratio, dw // 2, dh // 2
 
-
 def detect(dir_name,cfg,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_thre,cls_names):
+    print('detect begin*********************')
     start=datetime.datetime.now()
 
     cuda = torch.cuda.is_available()
     device = torch.device('cuda:0' if cuda else 'cpu')
-    device = 'cpu'
     yolov3net = Yolov3(cfg)
 
     if checkpoint_name.endswith('.weights'):
@@ -65,8 +67,8 @@ def detect(dir_name,cfg,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_
     print('****************model weights load done********************')
     #加载模型
 
-    # yolov3net.eval()
     yolov3net = yolov3net.to(device)
+    # print(yolov3net)
     yolov3net.eval()
 
     imgs = os.listdir(dir_name)
@@ -74,27 +76,31 @@ def detect(dir_name,cfg,checkpoint_name,model_input_size,conf_thre,iou_thre,cls_
         print(img_path)
         full_path = '{}/{}'.format(dir_name,img_path)
         img = cv2.imread(full_path)
-        # new_img = letter_box(img,(model_input_size,model_input_size))
-        # cv2.imwrite('./test_imgs/test.jpg',new_img)
+        new_img = letter_box(img,(model_input_size,model_input_size))
         # img, _, _, _ = resize_square(img, height=416, color=(127.5, 127.5, 127.5))
         new_img = img
-        new_img = new_img[:,:,::-1] #bgr->rgb
-        new_img = new_img.transpose( 2, 0, 1)  #hwc-chw
-        new_img = np.ascontiguousarray(new_img)
+        new_img = new_img[:,:,::-1].transpose( 2, 0, 1) #bgr->rgb hwc-chw
+        # print('new_img:{}'.format(new_img))
+        new_img = np.ascontiguousarray(new_img,dtype=np.float32)
+        # print('new_img/255:{}'.format(new_img/255.0))
         new_img = torch.from_numpy(new_img).to(device)
-        new_img = new_img.float()/255.
+        new_img = new_img.float()/255.0
+        # print('torch new_img/255:{}'.format(new_img))
         new_img = new_img.view(-1,3,model_input_size,model_input_size)
 
         imgs_path = [full_path]
 
         with torch.no_grad():
-            print('fuck:{}'.format(new_img[0,2,325,18]))
+            new_img = new_img.to(device)
+            # print(new_img)
             yolo_outs = yolov3net(new_img)
             detections = post_process(new_img,imgs_path,yolo_outs,model_input_size,conf_thre,iou_thre,cls_thre,cls_names)
 
     end=datetime.datetime.now()
     print('耗时{}'.format(end - start))
 
+# torch.set_printoptions(linewidth=1320, precision=5, profile='long')
+# np.set_printoptions(linewidth=320, formatter={'float_kind': '{11.5g}'.format})  # format short g, %precision=5
 
 if __name__ == '__main__':
     import argparse
@@ -112,8 +118,4 @@ if __name__ == '__main__':
 
     cls_names = load_classes(opt.cls_names_path)
     detect(opt.dir_name,opt.cfg,opt.model_path,opt.model_input_size,opt.conf_thre,opt.iou_thre,opt.cls_thre,cls_names)
-
-
-
-
 
